@@ -57,7 +57,7 @@ Focus Study can be used directly in the browser, or downloaded as a native appli
 
 ### 1. Web Version (Instant Access)
 Visit the live deployment to start studying immediately:
-👉 **[Focus Study on Netlify](https://focus-study.netlify.app/)** *(Replace with your actual netlify URL if different)*
+👉 **[Focus Study on Netlify](https://focusnstudy.netlify.app/)**
 
 ### 2. Desktop Version (.exe) - Recommended
 For the absolute best experience with `Alt+Tab` blocking, download the native Windows app.

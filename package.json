@@ -13,6 +13,9 @@
     "electron:build": "vite build && electron-builder"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
     "@google/genai": "^2.8.0",
     "@webcontainer/api": "^1.6.4",
     "@xterm/addon-fit": "^0.11.0",

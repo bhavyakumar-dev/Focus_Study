@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Focus Study</string>
+    <string name="title_activity_main">Focus Study</string>
+    <string name="package_name">com.focusstudy.app</string>
+    <string name="custom_url_scheme">com.focusstudy.app</string>
+</resources>

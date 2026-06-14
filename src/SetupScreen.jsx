@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Play, Flame, Award, FileText, Video } from 'lucide-react';
+import { Play, Flame, Award, FileText, Video, Music } from 'lucide-react';
 
 function SetupScreen({ onStart, stats, initialGeminiKey }) {
   const [materialType, setMaterialType] = useState('youtube'); // 'youtube' or 'pdf'
@@ -7,6 +7,7 @@ function SetupScreen({ onStart, stats, initialGeminiKey }) {
   const [pdfFile, setPdfFile] = useState(null);
   const [password, setPassword] = useState('');
   const [geminiKey, setGeminiKey] = useState(initialGeminiKey || '');
+  const [spotifyUrl, setSpotifyUrl] = useState('');
   const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
@@ -30,10 +31,28 @@ function SetupScreen({ onStart, stats, initialGeminiKey }) {
       setError('Please set an emergency exit password');
       return;
     }
-    if (!geminiKey) {
-      setError('Gemini API key is required for the AI assistant');
-      return;
+    
+    // Validate Spotify URL if provided
+    let spotifyId = '';
+    let spotifyType = '';
+    if (spotifyUrl) {
+      if (!spotifyUrl.includes('spotify.com')) {
+        setError('Please enter a valid Spotify URL or leave blank');
+        return;
+      }
+      try {
+        const urlObj = new URL(spotifyUrl);
+        const parts = urlObj.pathname.split('/').filter(Boolean);
+        if (parts.length >= 2) {
+          spotifyType = parts[0]; // e.g., 'playlist', 'album', 'track'
+          spotifyId = parts[1];
+        }
+      } catch (e) {
+        setError('Invalid Spotify URL');
+        return;
+      }
     }
+
     setError('');
     
     onStart({ 
@@ -41,7 +60,8 @@ function SetupScreen({ onStart, stats, initialGeminiKey }) {
       videoUrl: materialType === 'youtube' ? videoUrl : '', 
       pdfUrl: finalPdfUrl,
       password, 
-      geminiKey 
+      geminiKey,
+      spotifyEmbedUrl: spotifyId ? `https://open.spotify.com/embed/${spotifyType}/${spotifyId}?utm_source=generator` : ''
     });
   };
 
@@ -110,6 +130,30 @@ function SetupScreen({ onStart, stats, initialGeminiKey }) {
           )}
 
           <div>
+            <label className="stat-label" style={{ display: 'block', marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Music size={14}/> Spotify Playlist / Album URL (Optional)
+            </label>
+            <input 
+              type="text" 
+              className="premium-input" 
+              placeholder="e.g. https://open.spotify.com/playlist/..." 
+              value={spotifyUrl}
+              onChange={(e) => setSpotifyUrl(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="stat-label" style={{ display: 'block', marginBottom: '5px' }}>Gemini API Key (Optional)</label>
+            <input 
+              type="password" 
+              className="premium-input" 
+              placeholder="Leave blank to disable AI" 
+              value={geminiKey}
+              onChange={(e) => setGeminiKey(e.target.value)}
+            />
+          </div>
+
+          <div>
             <label className="stat-label" style={{ display: 'block', marginBottom: '5px' }}>Emergency Exit Password</label>
             <input 
               type="password" 
@@ -117,17 +161,6 @@ function SetupScreen({ onStart, stats, initialGeminiKey }) {
               placeholder="Set a password to exit early" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="stat-label" style={{ display: 'block', marginBottom: '5px' }}>Gemini API Key</label>
-            <input 
-              type="password" 
-              className="premium-input" 
-              placeholder="AI requires a Gemini API Key" 
-              value={geminiKey}
-              onChange={(e) => setGeminiKey(e.target.value)}
             />
           </div>
 

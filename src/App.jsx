@@ -5,9 +5,12 @@ import FocusMode from './FocusMode';
 function App() {
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [sessionData, setSessionData] = useState({
+    materialType: 'youtube',
     videoUrl: '',
+    pdfUrl: '',
     password: '',
     geminiKey: localStorage.getItem('geminiKey') || '',
+    spotifyEmbedUrl: ''
   });
 
   const [stats, setStats] = useState({
@@ -32,15 +35,28 @@ function App() {
     setIsFocusMode(false);
     if (success) {
       setStats((prev) => ({
+        ...prev,
         points: prev.points + pointsEarned,
         streak: prev.streak + 1,
       }));
     } else {
       setStats((prev) => ({
+        ...prev,
         points: prev.points,
         streak: 0, // Reset streak on failure
       }));
     }
+  };
+
+  const handleSpendPoints = (amount) => {
+    if (stats.points >= amount) {
+      setStats((prev) => ({
+        ...prev,
+        points: prev.points - amount
+      }));
+      return true;
+    }
+    return false;
   };
 
   return (
@@ -55,6 +71,8 @@ function App() {
         <FocusMode 
           sessionData={sessionData} 
           onEnd={handleEndFocus} 
+          globalPoints={stats.points}
+          onSpendPoints={handleSpendPoints}
         />
       )}
     </>

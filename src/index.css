@@ -171,13 +171,55 @@ body {
   z-index: 10;
 }
 
-.ai-sidebar {
+.sidebar-container {
   width: 350px;
   border-left: 1px solid var(--glass-border);
   background: var(--bg-panel);
   display: flex;
   flex-direction: column;
   z-index: 20;
+}
+
+.ai-sidebar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.spotify-container {
+  border-top: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.spotify-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.spotify-player-wrapper {
+  position: relative;
+  width: 100%;
+  height: 152px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.spotify-lock-overlay {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(5px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 5;
 }
 
 .chat-messages {

@@ -4,8 +4,9 @@ import PdfViewer from './PdfViewer';
 import GeminiAssistant from './GeminiAssistant';
 import FocusTracker from './FocusTracker';
 import UnlockModal from './UnlockModal';
+import SpotifyPlayer from './SpotifyPlayer';
 
-function FocusMode({ sessionData, onEnd }) {
+function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [focusSeconds, setFocusSeconds] = useState(0);
   const [isDead, setIsDead] = useState(false);
@@ -54,7 +55,6 @@ function FocusMode({ sessionData, onEnd }) {
   useEffect(() => {
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
-        // Exited full screen!
         setIsPlaying(false);
         setShowUnlockModal(true);
       }
@@ -62,6 +62,26 @@ function FocusMode({ sessionData, onEnd }) {
 
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  // Anti-cheat: Aggressive Keyboard Shortcut Blocking
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Prevent standard Tab to stop keyboard navigation escaping the iframe/window if possible
+      if (e.key === 'Tab') {
+        e.preventDefault();
+      }
+      
+      // We can attempt to prevent default on Ctrl/Alt combos, but modern browsers usually override this.
+      if ((e.ctrlKey && e.key === 'Tab') || (e.altKey && e.key === 'Tab')) {
+        e.preventDefault();
+        // Since we can't reliably block it, we trigger a warning just in case they are trying it
+        handleFocusBroken();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const handleFocusBroken = () => {
@@ -73,7 +93,6 @@ function FocusMode({ sessionData, onEnd }) {
   const resumeFocus = async () => {
     setShowWarning(false);
     setIsDead(false);
-    // Attempt to re-enter full screen
     if (containerRef.current && !document.fullscreenElement) {
       try {
         await containerRef.current.requestFullscreen();
@@ -85,17 +104,14 @@ function FocusMode({ sessionData, onEnd }) {
   };
 
   const handleVideoEnd = () => {
-    // Video finished naturally!
     onEnd(true, Math.floor(focusSeconds / 10));
   };
 
   const forceQuit = () => {
-    // User gave up
     onEnd(false, 0);
   };
 
   const safeExit = () => {
-    // Safe exit gives 0 points but keeps streak
     onEnd(true, 0);
   };
 
@@ -104,9 +120,6 @@ function FocusMode({ sessionData, onEnd }) {
     resumeFocus();
   };
 
-  // If it's a PDF, there's no natural "end" event like a video.
-  // The user will have to exit via the password to claim their points safely when they finish reading.
-  // For PDFs, we'll let them safe exit and award points based on time spent.
   const pdfSafeExit = () => {
     onEnd(true, Math.floor(focusSeconds / 10));
   };
@@ -130,8 +143,22 @@ function FocusMode({ sessionData, onEnd }) {
         )}
       </div>
 
-      {/* AI Assistant */}
-      <GeminiAssistant apiKey={sessionData.geminiKey} />
+      {/* Sidebar Area: AI & Spotify */}
+      {(sessionData.geminiKey || sessionData.spotifyEmbedUrl) && (
+        <div className="sidebar-container">
+          {sessionData.geminiKey && (
+            <GeminiAssistant apiKey={sessionData.geminiKey} />
+          )}
+          {sessionData.spotifyEmbedUrl && (
+            <SpotifyPlayer 
+              embedUrl={sessionData.spotifyEmbedUrl} 
+              globalPoints={globalPoints} 
+              onSpendPoints={onSpendPoints} 
+              isPlaying={isPlaying}
+            />
+          )}
+        </div>
+      )}
 
       {/* Overlays */}
       {showWarning && (

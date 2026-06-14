@@ -63,34 +63,63 @@ export default function CodeEditor() {
   const executeCode = async () => {
     setIsRunning(true);
     setOutput('Compiling/Running...');
-    
-    // Map Monaco language to Piston language
-    const langMap = {
-      javascript: 'javascript',
-      python: 'python',
-      java: 'java',
-      cpp: 'cpp',
-      rust: 'rust'
-    };
+
+    if (language === 'javascript') {
+      // Native JS Execution in browser
+      let consoleOutput = [];
+      const originalLog = console.log;
+      const originalError = console.error;
+      
+      console.log = (...args) => {
+        consoleOutput.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+        originalLog(...args);
+      };
+      console.error = (...args) => {
+        consoleOutput.push('[ERROR] ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+        originalError(...args);
+      };
+
+      try {
+        // eslint-disable-next-line no-new-func
+        const userCode = new Function(code);
+        userCode();
+        setOutput(consoleOutput.join('\n') || 'Code executed successfully (no console output).');
+      } catch (err) {
+        setOutput('Error: ' + err.toString());
+      } finally {
+        console.log = originalLog;
+        console.error = originalError;
+        setIsRunning(false);
+      }
+      return;
+    }
+
+    // For other languages, use AI Simulation since public compilers are blocked
+    const geminiKey = localStorage.getItem('geminiKey');
+    if (!geminiKey) {
+      setOutput('The public Piston Compiler API was shut down.\n\nPlease enter a Gemini API Key in the Setup Screen Options to enable the AI Code Simulator for Python, C++, Java, and Rust. \n\n(JavaScript will continue to run natively offline without a key).');
+      setIsRunning(false);
+      return;
+    }
 
     try {
-      const response = await fetch('https://emkc.org/api/v2/piston/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          language: langMap[language] || language,
-          version: '*',
-          files: [{ content: code }]
-        })
+      const ai = new GoogleGenAI({ apiKey: geminiKey });
+      const prompt = `You are a strict, sandboxed code execution engine. 
+      The user is running this ${language} code:
+      \`\`\`${language}
+      ${code}
+      \`\`\`
+      Simulate the exact standard output (stdout and stderr) that a real compiler/interpreter would produce. 
+      If there is a syntax error, output the realistic compiler error. 
+      Return ONLY the raw text output. Do NOT wrap it in markdown blocks, do NOT explain the code, do NOT say "Output:". Just give me the exact text that would appear in the terminal.`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
       });
-      const data = await response.json();
-      if (data.run) {
-        setOutput(data.run.output || 'No output.');
-      } else {
-        setOutput(data.message || 'Execution failed.');
-      }
+      setOutput(response.text?.trim() || 'No output from simulator.');
     } catch (err) {
-      setOutput('Network error: ' + err.message);
+      setOutput('AI Simulator Error: ' + err.message);
     } finally {
       setIsRunning(false);
     }

@@ -284,24 +284,108 @@ export default function CodeEditor() {
         return;
       }
     } else {
-      // Web: simulate simple JS execution via eval (safe for user's own code)
+      // ─── Web Execution Engine ───
       if (activeFile.language === 'javascript') {
         try {
+          const originalLog = console.log;
+          const originalError = console.error;
+          const originalWarn = console.warn;
+          let captured = '';
+          const capture = (prefix, ...args) => { captured += (prefix ? `[${prefix}] ` : '') + args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ') + '\n'; };
+          
+          console.log = (...args) => capture('', ...args);
+          console.error = (...args) => capture('ERR', ...args);
+          console.warn = (...args) => capture('WARN', ...args);
+          
+          const fn = new Function(activeFile.content);
+          const result = fn();
+          if (result !== undefined) captured += '→ ' + String(result) + '\n';
+          
+          console.log = originalLog;
+          console.error = originalError;
+          console.warn = originalWarn;
+          setOutput(prev => prev + (captured || '(No output)\n'));
+        } catch (e) {
+          setOutput(prev => prev + '[Runtime Error] ' + e.message + '\n');
+        }
+      } else if (activeFile.language === 'python') {
+        // Python execution via Pyodide (WebAssembly CPython)
+        setOutput(prev => prev + 'Loading Python runtime (Pyodide)...\n');
+        try {
+          if (!window._pyodide) {
+            // Lazy-load Pyodide
+            if (!document.getElementById('pyodide-script')) {
+              const script = document.createElement('script');
+              script.id = 'pyodide-script';
+              script.src = 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js';
+              document.head.appendChild(script);
+              await new Promise((resolve, reject) => {
+                script.onload = resolve;
+                script.onerror = () => reject(new Error('Failed to load Pyodide CDN'));
+              });
+            }
+            window._pyodide = await window.loadPyodide();
+          }
+          
+          const pyodide = window._pyodide;
+          
+          // Capture stdout/stderr
+          pyodide.runPython(`
+import sys, io
+sys.stdout = io.StringIO()
+sys.stderr = io.StringIO()
+          `);
+          
+          try {
+            pyodide.runPython(activeFile.content);
+          } catch (pyErr) {
+            const stderr = pyodide.runPython('sys.stderr.getvalue()');
+            setOutput(prev => prev + '[Python Error]\n' + (stderr || pyErr.message) + '\n');
+            setIsRunning(false);
+            return;
+          }
+          
+          const stdout = pyodide.runPython('sys.stdout.getvalue()');
+          setOutput(prev => prev + (stdout || '(No output)\n'));
+        } catch (e) {
+          setOutput(prev => prev + '[Pyodide Error] ' + e.message + '\n');
+        }
+      } else if (activeFile.language === 'typescript') {
+        // TypeScript: strip types and run as JS
+        try {
+          // Simple type-stripping: remove type annotations (basic but functional)
+          let jsCode = activeFile.content
+            .replace(/:\s*(string|number|boolean|any|void|never|unknown|object|undefined|null)(\[\])?/g, '')
+            .replace(/:\s*\{[^}]*\}/g, '')
+            .replace(/<[A-Z][^>]*>/g, '')
+            .replace(/\bas\s+\w+/g, '')
+            .replace(/interface\s+\w+\s*\{[^}]*\}/g, '')
+            .replace(/type\s+\w+\s*=\s*[^;]+;/g, '');
+          
           const originalLog = console.log;
           let captured = '';
           console.log = (...args) => { captured += args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ') + '\n'; };
           
-          // Use Function constructor for slightly safer eval
-          const fn = new Function(activeFile.content);
+          const fn = new Function(jsCode);
           fn();
           
           console.log = originalLog;
           setOutput(prev => prev + (captured || '(No output)\n'));
         } catch (e) {
-          setOutput(prev => prev + '[Runtime Error] ' + e.message + '\n');
+          setOutput(prev => prev + '[TS Runtime Error] ' + e.message + '\n');
+        }
+      } else if (activeFile.language === 'html') {
+        // HTML: open in a new tab preview
+        try {
+          const blob = new Blob([activeFile.content], { type: 'text/html' });
+          const url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+          setOutput(prev => prev + 'HTML preview opened in a new tab.\n');
+        } catch (e) {
+          setOutput(prev => prev + '[Error] ' + e.message + '\n');
         }
       } else {
-        setOutput(prev => prev + '[Info] Native execution for ' + activeFile.language + ' requires the Desktop .exe app.\nJavaScript can be executed in the browser.\n');
+        setOutput(prev => prev + `[Info] Web execution for "${activeFile.language}" is not available.\nSupported in browser: JavaScript, Python, TypeScript, HTML.\nFor C++/Java/Rust, use the Desktop .exe app.\n`);
       }
       setIsRunning(false);
     }

@@ -11,11 +11,12 @@ import TaskManager from './TaskManager';
 import Scratchpad from './Scratchpad';
 import CodeEditor from './CodeEditor';
 import { getRankFromPoints } from './utils/levels';
-import { Lock, Unlock } from 'lucide-react';
+import { Lock, Unlock, Command, Clock, Zap, Activity } from 'lucide-react';
 import WidgetPanel from './WidgetPanel';
 import MultiplayerWidget from './MultiplayerWidget';
 import HealthProtocols from './HealthProtocols';
 import FocusPet from './FocusPet';
+import CommandPalette from './CommandPalette';
 
 function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints, currentUser }) {
   const [isPlaying, setIsPlaying] = useState(true);
@@ -31,8 +32,16 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints, currentUse
 
   // Sidebar state
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
 
   const containerRef = useRef(null);
+
+  const formatTime = (secs) => {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return `${h > 0 ? h + ':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
   
   // Enter full screen on mount
   useEffect(() => {
@@ -171,6 +180,20 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints, currentUse
     onEnd(true, Math.floor(focusSeconds / 10));
   };
 
+  const handleCommand = (cmdId) => {
+    switch (cmdId) {
+      case '__open_palette': setIsPaletteOpen(true); break;
+      case 'toggle-widgets': setIsWidgetsLocked(!isWidgetsLocked); break;
+      case 'end-session': handleEndSession(); break;
+      case 'fullscreen':
+        if (containerRef.current && !document.fullscreenElement) {
+          containerRef.current.requestFullscreen().catch(() => {});
+        }
+        break;
+      default: break;
+    }
+  };
+
   return (
     <div className="focus-container" ref={containerRef}>
       <HealthProtocols isPlaying={isPlaying} isDead={isDead} />
@@ -290,6 +313,39 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints, currentUse
           forceQuit={forceQuit}
         />
       )}
+
+      {/* Command Palette */}
+      <CommandPalette 
+        isOpen={isPaletteOpen} 
+        onClose={() => setIsPaletteOpen(false)} 
+        onCommand={handleCommand} 
+      />
+
+      {/* ═══ Status Bar ═══ */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, height: '24px',
+        backgroundColor: 'rgba(0, 120, 212, 0.9)', display: 'flex', alignItems: 'center',
+        padding: '0 12px', gap: '16px', fontSize: '0.7rem', color: 'white',
+        zIndex: 50, backdropFilter: 'blur(10px)',
+        borderTop: '1px solid rgba(255,255,255,0.1)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <Zap size={11} /> {isDead ? 'BROKEN' : isPlaying ? 'DEEP FOCUS' : 'PAUSED'}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <Clock size={11} /> {formatTime(focusSeconds)}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <Activity size={11} /> {Math.floor(focusSeconds / 60) * 10} XP
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ opacity: 0.7, cursor: 'pointer' }} onClick={() => setIsPaletteOpen(true)} title="Command Palette (Ctrl+K)">
+          <Command size={11} /> Ctrl+K
+        </div>
+        <div style={{ opacity: 0.7 }}>
+          {sessionData.materialType === 'code' ? 'IDE Mode' : sessionData.materialType === 'youtube' ? 'Video Mode' : 'PDF Mode'}
+        </div>
+      </div>
     </div>
   );
 }

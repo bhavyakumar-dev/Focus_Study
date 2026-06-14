@@ -9,6 +9,7 @@ import SpotifyPlayer from './SpotifyPlayer';
 import AmbientMixer from './AmbientMixer';
 import TaskManager from './TaskManager';
 import Scratchpad from './Scratchpad';
+import CodeEditor from './CodeEditor';
 import { getRankFromPoints } from './utils/levels';
 
 function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
@@ -192,14 +193,15 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
             isPlaying={isPlaying} 
             onEnd={handleVideoEnd}
           />
+        ) : sessionData.materialType === 'code' ? (
+          <CodeEditor />
         ) : (
           <PdfViewer pdfUrl={sessionData.pdfUrl} />
         )}
       </div>
 
-      {/* Sidebar Area: AI & Spotify */}
-      {(sessionData.geminiKey || sessionData.spotifyEmbedUrl) && (
-        <div className={`sidebar-section ${!isSidebarOpen ? 'sidebar-collapsed' : ''}`}>
+      {/* Sidebar Area: Utilities, AI, & Media */}
+      <div className={`sidebar-section ${!isSidebarOpen ? 'sidebar-collapsed' : ''}`}>
           {sessionData.geminiKey && (
             <GeminiAssistant apiKey={sessionData.geminiKey} />
           )}
@@ -222,7 +224,6 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
             />
           )}
         </div>
-      )}
 
       {/* Overlays */}
       {showWarning && (

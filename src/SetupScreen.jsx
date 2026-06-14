@@ -23,9 +23,10 @@ export default function SetupScreen({ onStart, stats, initialGeminiKey }) {
     if (materialType === 'youtube') {
       if (!videoUrl) return setError('Please enter a YouTube URL');
       try { new URL(videoUrl); } catch { return setError('Invalid YouTube URL'); }
-    } else {
+    } else if (materialType === 'pdf') {
       if (!pdfUrl) return setError('Please enter a PDF URL or upload one');
     }
+    // No URL validation needed for 'code'
 
     let spotifyId = '';
     let spotifyType = 'playlist';
@@ -96,33 +97,42 @@ export default function SetupScreen({ onStart, stats, initialGeminiKey }) {
             >
               PDF Document
             </button>
+            <button 
+              type="button" 
+              className={`minimal-toggle-btn ${materialType === 'code' ? 'active' : ''}`}
+              onClick={() => setMaterialType('code')}
+            >
+              Code Editor
+            </button>
           </div>
 
-          <div className="minimal-input-wrapper">
-            {materialType === 'youtube' ? (
-              <input 
-                type="text" 
-                className="minimal-main-input" 
-                placeholder="Paste YouTube URL..." 
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-              />
-            ) : (
-              <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+          {materialType !== 'code' && (
+            <div className="minimal-input-wrapper">
+              {materialType === 'youtube' ? (
                 <input 
                   type="text" 
                   className="minimal-main-input" 
-                  placeholder="Paste PDF URL..." 
-                  value={pdfUrl}
-                  onChange={(e) => setPdfUrl(e.target.value)}
+                  placeholder="Paste YouTube URL..." 
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
                 />
-                <label className="minimal-upload-btn">
-                  Upload
-                  <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={handleFileUpload} />
-                </label>
-              </div>
-            )}
-          </div>
+              ) : (
+                <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                  <input 
+                    type="text" 
+                    className="minimal-main-input" 
+                    placeholder="Paste PDF URL..." 
+                    value={pdfUrl}
+                    onChange={(e) => setPdfUrl(e.target.value)}
+                  />
+                  <label className="minimal-upload-btn">
+                    Upload
+                    <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={handleFileUpload} />
+                  </label>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Advanced Options Toggle */}
           <button type="button" className="minimal-advanced-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>

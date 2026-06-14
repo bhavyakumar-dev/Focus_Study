@@ -38,7 +38,8 @@ Why study for free when you can level up?
 - **Zero Hallucination Tolerance**: The prompt is strictly engineered to *only* answer academic questions. It will aggressively refuse to tell jokes, chat about the weather, or entertain distractions.
 - **Quick Summary**: Instantly generate high-yield, bulleted summaries of your current study topic with a single click.
 
-### 📚 Immersive Media Integration
+### 📚 Immersive Study Materials
+- **Native Code Editor**: Select the 'Code Editor' material type to launch a deep-focus, dark-themed coding environment. Perfect for programming sessions without the distractions of a full OS window.
 - **YouTube Embeds**: Paste a YouTube lecture URL to embed it securely.
 - **Local PDF Support**: Upload your own local PDFs directly into the app for offline reading.
 - **Spotify Integration**: Embed your custom focus playlists directly into the environment.

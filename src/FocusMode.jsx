@@ -5,6 +5,8 @@ import GeminiAssistant from './GeminiAssistant';
 import FocusTracker from './FocusTracker';
 import UnlockModal from './UnlockModal';
 import SpotifyPlayer from './SpotifyPlayer';
+import AmbientMixer from './AmbientMixer';
+import TaskManager from './TaskManager';
 
 function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
   const [isPlaying, setIsPlaying] = useState(true);
@@ -186,6 +188,13 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
           {sessionData.geminiKey && (
             <GeminiAssistant apiKey={sessionData.geminiKey} />
           )}
+          
+          {/* Ambient Sounds */}
+          <AmbientMixer />
+
+          {/* Task Manager */}
+          <TaskManager />
+
           {sessionData.spotifyEmbedUrl && (
             <SpotifyPlayer 
               embedUrl={sessionData.spotifyEmbedUrl} 

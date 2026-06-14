@@ -1,9 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Terminal, Play, Bot, X, Loader, FileCode, Plus, Save, Cloud, Trash2 } from 'lucide-react';
+import { Terminal, Play, Bot, X, Loader, FileCode, Plus, Save, Cloud, Trash2, Users, Globe, Settings, Palette, Code2 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { db, doc, setDoc, getDoc } from './firebase';
-import { getWebContainer, syncFilesToWebContainer } from './WebContainerManager';
+import { getWebContainer, syncFilesToWebContainer, onServerReady } from './WebContainerManager';
 import XTermTerminal from './XTermTerminal';
+import SnippetLibrary from './SnippetLibrary';
+import { initVimMode } from 'monaco-vim';
+import * as Y from 'yjs';
+import { WebrtcProvider } from 'y-webrtc';
+import { MonacoBinding } from 'y-monaco';
 
 const STORAGE_KEY = 'focusIDE_files';
 const ACTIVE_KEY = 'focusIDE_activeFile';
@@ -35,7 +40,10 @@ export default function CodeEditor() {
   const [output, setOutput] = useState('Focus IDE Terminal — Ready.\n');
   const [isRunning, setIsRunning] = useState(false);
   
+  const [isCollabEnabled, setIsCollabEnabled] = useState(false);
+  
   const [isAiOpen, setIsAiOpen] = useState(false);
+  const [isGhostTextEnabled, setIsGhostTextEnabled] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [isAiThinking, setIsAiThinking] = useState(false);
@@ -47,6 +55,12 @@ export default function CodeEditor() {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [renamingFileId, setRenamingFileId] = useState(null);
   const [webcontainer, setWebcontainer] = useState(null);
+  const [serverPreviewUrl, setServerPreviewUrl] = useState(null);
+  
+  const [vimModeEnabled, setVimModeEnabled] = useState(false);
+  const [editorTheme, setEditorTheme] = useState('vs-dark');
+  const [isSnippetsOpen, setIsSnippetsOpen] = useState(false);
+  const isGhostTextEnabledRef = useRef(isGhostTextEnabled);
   
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
@@ -55,6 +69,12 @@ export default function CodeEditor() {
   const filesRef = useRef(files);
   const outputRef = useRef(null);
   const xtermRef = useRef(null);
+  
+  const yDocRef = useRef(null);
+  const yProviderRef = useRef(null);
+  const yBindingRef = useRef(null);
+  const vimInstanceRef = useRef(null);
+  const vimStatusBarRef = useRef(null);
   
   // Determine if we are in Electron
   const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().indexOf(' electron/') > -1;
@@ -67,10 +87,18 @@ export default function CodeEditor() {
         syncFilesToWebContainer(filesRef.current).catch(console.error);
       }).catch(console.error);
     }
+
+    // Listen for WebContainer dev servers
+    const unsubscribe = onServerReady((url) => {
+      setServerPreviewUrl(url);
+    });
+    return unsubscribe;
   }, [isElectron, webcontainer]);
+
 
   // Keep refs in sync so Monaco closure always has the latest value
   useEffect(() => { activeFileIdRef.current = activeFileId; }, [activeFileId]);
+  useEffect(() => { isGhostTextEnabledRef.current = isGhostTextEnabled; }, [isGhostTextEnabled]);
   useEffect(() => { filesRef.current = files; }, [files]);
 
   const activeFile = files.find(f => f.id === activeFileId) || files[0];
@@ -95,8 +123,26 @@ export default function CodeEditor() {
     }
   }, [output]);
 
+  useEffect(() => {
+    if (monacoRef.current) {
+      monacoRef.current.editor.setTheme(editorTheme);
+    }
+  }, [editorTheme]);
+
+  useEffect(() => {
+    if (vimModeEnabled && editorRef.current && vimStatusBarRef.current) {
+      vimInstanceRef.current = initVimMode(editorRef.current, vimStatusBarRef.current);
+    } else {
+      if (vimInstanceRef.current) {
+        vimInstanceRef.current.dispose();
+        vimInstanceRef.current = null;
+      }
+    }
+  }, [vimModeEnabled]);
+
   // ─── Monaco Editor Initialization (runs once) ───
   useEffect(() => {
+    let inlineCompletionsDisposable = null;
     // Determine if we are running in Electron
     const isElectronEnv = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().indexOf(' electron/') > -1;
     
@@ -142,12 +188,60 @@ export default function CodeEditor() {
             const currentActiveId = activeFileIdRef.current;
             setFiles(prev => prev.map(f => f.id === currentActiveId ? { ...f, content: val } : f));
           });
+
+          inlineCompletionsDisposable = window.monaco.languages.registerInlineCompletionsProvider('*', {
+            provideInlineCompletions: async (model, position, context, token) => {
+              if (!isGhostTextEnabledRef.current) return { items: [] };
+              const geminiKey = localStorage.getItem('geminiKey');
+              if (!geminiKey) return { items: [] };
+
+              const textBeforePointer = model.getValueInRange({
+                startLineNumber: 1, startColumn: 1,
+                endLineNumber: position.lineNumber, endColumn: position.column
+              });
+              const textAfterPointer = model.getValueInRange({
+                startLineNumber: position.lineNumber, startColumn: position.column,
+                endLineNumber: model.getLineCount(), endColumn: model.getLineMaxColumn(model.getLineCount())
+              });
+
+              // Only trigger if at the end of a line or after a space
+              if (textBeforePointer.trim() === '') return { items: [] };
+
+              try {
+                const { GoogleGenAI } = await import('@google/genai');
+                const ai = new GoogleGenAI({ apiKey: geminiKey });
+                const prompt = `You are an inline code autocomplete AI.
+      Code before cursor:
+      ${textBeforePointer}
+      <CURSOR>
+      Code after cursor:
+      ${textAfterPointer}
+      
+      Respond with ONLY the exact code that should be inserted at the cursor position to complete the thought. Do NOT wrap in markdown \`\`\` blocks. Do NOT explain.`;
+                
+                const response = await ai.models.generateContent({
+                  model: 'gemini-2.5-flash',
+                  contents: [{ role: 'user', parts: [{ text: prompt }] }]
+                });
+                
+                if (response.text) {
+                  let insertText = response.text.replace(/^\s*\n/, '').replace(/^```.*\n/, '').replace(/```$/, '');
+                  return {
+                    items: [{ insertText }]
+                  };
+                }
+              } catch(e) { return { items: [] }; }
+              return { items: [] };
+            },
+            freeInlineCompletions: () => {}
+          });
         }
       });
     };
     document.body.appendChild(script);
 
     return () => {
+      if (inlineCompletionsDisposable) inlineCompletionsDisposable.dispose();
       if (editorRef.current) editorRef.current.dispose();
       try { document.body.removeChild(script); } catch { /* already removed */ }
     };
@@ -165,6 +259,41 @@ export default function CodeEditor() {
       }
     }
   }, [activeFileId]);
+
+  useEffect(() => {
+    if (!isCollabEnabled) {
+      if (yBindingRef.current) {
+        yBindingRef.current.destroy();
+        yBindingRef.current = null;
+      }
+      if (yProviderRef.current) {
+        yProviderRef.current.destroy();
+        yProviderRef.current = null;
+      }
+      yDocRef.current = null;
+      return;
+    }
+
+    if (isCollabEnabled && !yDocRef.current) {
+      yDocRef.current = new Y.Doc();
+      yProviderRef.current = new WebrtcProvider('focus-ide-collab-room', yDocRef.current);
+    }
+
+    if (isCollabEnabled && editorRef.current) {
+      if (yBindingRef.current) {
+        yBindingRef.current.destroy();
+        yBindingRef.current = null;
+      }
+      const yText = yDocRef.current.getText('file-' + activeFileId);
+      
+      yBindingRef.current = new MonacoBinding(
+        yText,
+        editorRef.current.getModel(),
+        new Set([editorRef.current]),
+        yProviderRef.current.awareness
+      );
+    }
+  }, [isCollabEnabled, activeFileId]);
 
   // ─── File Operations ───
   const changeLanguage = (lang) => {
@@ -431,6 +560,37 @@ sys.stderr = io.StringIO()
               xtermRef.current.runCommand(`node "${activeFile.name}"`);
             } else if (activeFile.language === 'python') {
               xtermRef.current.runCommand(`python3 "${activeFile.name}"`);
+            } else if (activeFile.language === 'cpp' || activeFile.language === 'java') {
+              // Polyglot execution via Piston API
+              setOutput(prev => prev + `[Info] Compiling and running ${activeFile.language} via Piston Cloud...\n`);
+              
+              const langConfig = activeFile.language === 'cpp' 
+                ? { language: 'cpp', version: '10.2.0' }
+                : { language: 'java', version: '15.0.2' };
+
+              fetch('https://emacs.piston.rs/api/v2/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ...langConfig,
+                  files: [{ name: activeFile.name, content: activeFile.content }]
+                })
+              })
+              .then(res => res.json())
+              .then(data => {
+                if (data.run && data.run.output) {
+                  setOutput(prev => prev + data.run.output + '\n');
+                } else if (data.compile && data.compile.output) {
+                  setOutput(prev => prev + '[Compile Error]\n' + data.compile.output + '\n');
+                } else {
+                  setOutput(prev => prev + JSON.stringify(data) + '\n');
+                }
+              })
+              .catch(err => {
+                setOutput(prev => prev + '[Cloud Execution Error] ' + err.message + '\n');
+              })
+              .finally(() => setIsRunning(false));
+              return; // return early to avoid setting isRunning to false below
             } else {
               setOutput(prev => prev + `[Info] Running generic file in WebContainer.\n`);
               xtermRef.current.runCommand(`cat "${activeFile.name}"`);
@@ -551,6 +711,50 @@ sys.stderr = io.StringIO()
       setAiResponse(response.text || 'No response.');
     } catch (err) {
       setAiResponse('AI Error: ' + (err.message || 'Unknown error'));
+    } finally {
+      setIsAiThinking(false);
+    }
+  };
+
+  const explainTerminalError = async () => {
+    const termContent = isElectron ? output : (xtermRef.current?.getBuffer() || '');
+    if (!termContent.trim()) return;
+    
+    const geminiKey = localStorage.getItem('geminiKey');
+    if (!geminiKey) {
+      setIsAiOpen(true);
+      setAiResponse('Please enter a Gemini API Key in the Setup Screen Options to use AI Copilot.');
+      return;
+    }
+
+    setIsAiOpen(true);
+    setIsAiThinking(true);
+    setAiResponse('');
+    setAiPrompt('Explain this terminal output...');
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: geminiKey });
+      const prompt = `You are an elite debugging AI embedded in Focus IDE.
+      The user just ran some code or commands and got this terminal output:
+      \`\`\`
+      ${termContent}
+      \`\`\`
+      Current active file code (${activeFile.language}):
+      \`\`\`
+      ${activeFile.content}
+      \`\`\`
+      Identify any errors in the terminal output, explain what went wrong concisely, and provide a fix.`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      });
+
+      if (response.text) {
+        setAiResponse(response.text);
+      }
+    } catch (e) {
+      setAiResponse('[AI Error] ' + e.message);
     } finally {
       setIsAiThinking(false);
     }
@@ -706,17 +910,68 @@ sys.stderr = io.StringIO()
             </button>
           </div>
 
-          <button 
-            onClick={() => setIsAiOpen(!isAiOpen)}
-            style={{ display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: isAiOpen ? 'var(--accent-purple)' : 'transparent', color: isAiOpen ? 'white' : 'var(--accent-purple)', border: '1px solid var(--accent-purple)', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s' }}
-          >
-            <Bot size={13} /> Copilot
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <select value={editorTheme} onChange={e => setEditorTheme(e.target.value)} style={{ background: '#333', color: '#fff', border: '1px solid #444', borderRadius: '4px', padding: '4px', fontSize: '0.75rem', outline: 'none' }}>
+              <option value="vs-dark">Dark</option>
+              <option value="vs-light">Light</option>
+              <option value="hc-black">High Contrast</option>
+            </select>
+            <button 
+              onClick={() => setVimModeEnabled(!vimModeEnabled)}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: vimModeEnabled ? 'rgba(16, 185, 129, 0.1)' : 'transparent', color: vimModeEnabled ? '#10b981' : '#aaa', border: `1px solid ${vimModeEnabled ? '#10b981' : '#444'}`, padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s', boxShadow: vimModeEnabled ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none' }}
+            >
+              Vim
+            </button>
+            <button 
+              onClick={() => setIsCollabEnabled(!isCollabEnabled)}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: isCollabEnabled ? 'rgba(16, 185, 129, 0.1)' : 'transparent', color: isCollabEnabled ? '#10b981' : '#aaa', border: `1px solid ${isCollabEnabled ? '#10b981' : '#444'}`, padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s', boxShadow: isCollabEnabled ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none' }}
+            >
+              <Users size={13} /> Collab
+            </button>
+            <button 
+              onClick={() => setIsGhostTextEnabled(!isGhostTextEnabled)}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: isGhostTextEnabled ? 'rgba(16, 185, 129, 0.1)' : 'transparent', color: isGhostTextEnabled ? '#10b981' : '#aaa', border: `1px solid ${isGhostTextEnabled ? '#10b981' : '#444'}`, padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s', boxShadow: isGhostTextEnabled ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none' }}
+            >
+              <Bot size={13} /> Ghost Text
+            </button>
+            <button 
+              onClick={() => setIsSnippetsOpen(!isSnippetsOpen)}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: isSnippetsOpen ? 'var(--accent-purple)' : 'transparent', color: isSnippetsOpen ? 'white' : 'var(--accent-purple)', border: '1px solid var(--accent-purple)', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s' }}
+            >
+              <Code2 size={13} /> Snippets
+            </button>
+            <button 
+              onClick={() => setIsAiOpen(!isAiOpen)}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: isAiOpen ? 'var(--accent-purple)' : 'transparent', color: isAiOpen ? 'white' : 'var(--accent-purple)', border: '1px solid var(--accent-purple)', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s' }}
+            >
+              <Bot size={13} /> Copilot
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Monaco Editor */}
-          <div ref={containerRef} style={{ flex: 1, height: '100%' }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <div ref={containerRef} style={{ flex: 1, height: '100%' }} />
+            {vimModeEnabled && <div ref={vimStatusBarRef} style={{ padding: '2px 10px', fontSize: '0.75rem', backgroundColor: '#333', color: '#ccc', fontFamily: '"Cascadia Code", monospace', flexShrink: 0 }} />}
+          </div>
+
+          {isSnippetsOpen && (
+            <SnippetLibrary 
+              onClose={() => setIsSnippetsOpen(false)}
+              onInsert={(code) => {
+                if (editorRef.current) {
+                  const position = editorRef.current.getPosition();
+                  editorRef.current.executeEdits('snippets', [{
+                    range: new window.monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
+                    text: code,
+                    forceMoveMarkers: true
+                  }]);
+                  editorRef.current.focus();
+                }
+              }}
+            />
+          )}
 
           {/* AI Sidebar Overlay */}
           {isAiOpen && (
@@ -745,13 +1000,30 @@ sys.stderr = io.StringIO()
               </div>
             </div>
           )}
+
+          {/* Web Preview Iframe */}
+          {serverPreviewUrl && (
+            <div style={{ width: '400px', backgroundColor: '#fff', borderLeft: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+              <div style={{ padding: '8px 12px', backgroundColor: '#f0f0f0', borderBottom: '1px solid #ccc', color: '#333', fontSize: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><Globe size={12}/> Live Preview</span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <a href={serverPreviewUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--accent-cyan)', textDecoration: 'none' }}>Open Tab</a>
+                  <button onClick={() => setServerPreviewUrl(null)} style={{ background:'none', border:'none', color:'#888', cursor:'pointer', padding: '0' }}><X size={14}/></button>
+                </div>
+              </div>
+              <iframe src={serverPreviewUrl} style={{ flex: 1, border: 'none', width: '100%', height: '100%' }} title="Live Preview" />
+            </div>
+          )}
         </div>
 
         {/* ═══ Terminal Output ═══ */}
         <div style={{ height: '180px', backgroundColor: '#1a1a1a', borderTop: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <div style={{ padding: '4px 12px', color: '#666', fontSize: '0.72rem', borderBottom: '1px solid #252526', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             <span><Terminal size={11} style={{ verticalAlign: 'middle', marginRight: '5px' }} />Terminal {isElectron ? '(Local)' : '(WebContainer)'}</span>
-            {isElectron && <button onClick={() => setOutput('')} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: '0.7rem' }}>Clear</button>}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button onClick={explainTerminalError} style={{ background: 'none', border: 'none', color: 'var(--accent-purple)', cursor: 'pointer', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '3px' }}><Bot size={11}/> Explain Error</button>
+              {isElectron && <button onClick={() => setOutput('')} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: '0.7rem' }}>Clear</button>}
+            </div>
           </div>
           
           {isElectron ? (

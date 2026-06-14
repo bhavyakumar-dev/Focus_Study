@@ -102,6 +102,15 @@ const XTermTerminal = forwardRef(({ webcontainer, onClear }, ref) => {
       const input = processRef.current.input.getWriter();
       await input.write(cmd + '\r');
       input.releaseLock();
+    },
+    getBuffer: () => {
+      if (!xtermRef.current) return '';
+      const buffer = xtermRef.current.buffer.active;
+      let text = '';
+      for (let i = Math.max(0, buffer.length - 50); i < buffer.length; i++) {
+        text += buffer.getLine(i).translateToString(true) + '\n';
+      }
+      return text;
     }
   }));
 

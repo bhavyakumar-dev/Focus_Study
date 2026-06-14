@@ -11,6 +11,7 @@ export default function SetupScreen({ onStart, stats, initialGeminiKey }) {
   const [geminiKey, setGeminiKey] = useState(initialGeminiKey || '');
   const [spotifyUrl, setSpotifyUrl] = useState('');
   const [roomId, setRoomId] = useState('');
+  const [roomPassword, setRoomPassword] = useState('');
   const [isPomodoro, setIsPomodoro] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState('');
@@ -87,6 +88,7 @@ export default function SetupScreen({ onStart, stats, initialGeminiKey }) {
       password, 
       geminiKey,
       roomId,
+      roomPassword,
       spotifyEmbedUrl: spotifyId ? `https://open.spotify.com/embed/${spotifyType}/${spotifyId}?utm_source=generator&theme=0` : '',
       isPomodoro
     });
@@ -208,13 +210,24 @@ export default function SetupScreen({ onStart, stats, initialGeminiKey }) {
                   <Wand2 size={14} /> {isGeneratingPlaylist ? '...' : 'AI Generate'}
                 </button>
               </div>
-              <input 
-                type="text" 
-                className="minimal-sub-input" 
-                placeholder="Study Room Code (Optional, e.g. ROOM99)" 
-                value={roomId}
-                onChange={(e) => setRoomId(e.target.value.trim().toUpperCase())}
-              />
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input 
+                  type="text" 
+                  className="minimal-sub-input" 
+                  style={{ flex: 1 }}
+                  placeholder="Study Room Code (Optional)" 
+                  value={roomId}
+                  onChange={(e) => setRoomId(e.target.value.trim().toUpperCase())}
+                />
+                <input 
+                  type="password" 
+                  className="minimal-sub-input" 
+                  style={{ flex: 1 }}
+                  placeholder="Room Password" 
+                  value={roomPassword}
+                  onChange={(e) => setRoomPassword(e.target.value)}
+                />
+              </div>
               <input 
                 type="password" 
                 className="minimal-sub-input" 

@@ -30,11 +30,14 @@ function App() {
 
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('focusUser');
-    return saved ? JSON.parse(saved) : null;
+    return saved ? JSON.parse(saved) : { email: 'guest@local', name: 'Guest', isGuest: true };
   });
+
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const handleLogin = (user) => {
     setCurrentUser(user);
+    setShowLoginModal(false);
   };
 
   const handleGuest = () => {
@@ -110,10 +113,6 @@ function App() {
     return false;
   };
 
-  if (!currentUser) {
-    return <LoginScreen onLogin={handleLogin} onGuest={handleGuest} />;
-  }
-
   return (
     <div className="app-wrapper">
       {/* Top Bar showing User Info */}
@@ -129,9 +128,20 @@ function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', color: 'var(--text-main)', fontSize: '0.8rem', backdropFilter: 'blur(10px)', border: '1px solid var(--border-color)' }}>
           <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: currentUser.isGuest ? 'var(--text-muted)' : 'var(--accent-cyan)' }}></div>
           {currentUser.name}
-          <button onClick={() => { localStorage.removeItem('focusUser'); setCurrentUser(null); }} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', marginLeft: '10px', fontSize: '0.7rem' }}>LOGOUT</button>
+          {!currentUser.isGuest ? (
+             <button onClick={() => { localStorage.removeItem('focusUser'); setCurrentUser({ email: 'guest@local', name: 'Guest', isGuest: true }); }} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', marginLeft: '10px', fontSize: '0.7rem' }}>LOGOUT</button>
+          ) : (
+             <button onClick={() => setShowLoginModal(true)} style={{ background: 'var(--accent-cyan)', border: 'none', borderRadius: '15px', padding: '2px 8px', color: 'black', cursor: 'pointer', marginLeft: '10px', fontSize: '0.7rem', fontWeight: 'bold' }}>SIGN IN</button>
+          )}
         </div>
       </div>
+
+      {showLoginModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, background: 'rgba(0,0,0,0.8)' }}>
+          <button onClick={() => setShowLoginModal(false)} style={{ position: 'absolute', top: 20, right: 20, zIndex: 10000, background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: '1.5rem' }}>✕</button>
+          <LoginScreen onLogin={handleLogin} onGuest={() => setShowLoginModal(false)} />
+        </div>
+      )}
 
       {showAnalytics && <AnalyticsDashboard stats={stats} sessionLogs={sessionLogs} onClose={() => setShowAnalytics(false)} />}
 

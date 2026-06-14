@@ -2,31 +2,35 @@ import React, { useEffect, useState } from 'react';
 import { Users, AlertTriangle, Hand } from 'lucide-react';
 import { MultiplayerService } from './MultiplayerService';
 
-export default function MultiplayerWidget({ roomId, currentUser, isDead, focusSeconds }) {
-  const [users, setUsers] = useState({});
+export default function MultiplayerWidget({ roomId, roomPassword, currentUser, isDead, focusSeconds }) {
+  const [roomData, setRoomData] = useState({ users: {}, pending: {}, hostId: null });
   const [service, setService] = useState(null);
   const [error, setError] = useState('');
+  const [isPending, setIsPending] = useState(false);
 
   useEffect(() => {
     if (!roomId) return;
     
-    const mp = new MultiplayerService(roomId, currentUser);
+    const mp = new MultiplayerService(roomId, roomPassword, currentUser);
     
-    mp.joinRoom().then((success) => {
-      if (!success) {
-        setError('Firebase not configured. Multiplayer offline.');
+    mp.joinRoom().then((res) => {
+      if (!res.success) {
+        setError(res.reason || 'Failed to join room');
         return;
       }
+      if (res.isPending) {
+        setIsPending(true);
+      }
       setService(mp);
-      mp.listen((roomUsers) => {
-        setUsers(roomUsers || {});
+      mp.listen((data) => {
+        setRoomData(data || { users: {}, pending: {} });
       });
     });
 
     return () => {
       mp.leaveRoom();
     };
-  }, [roomId, currentUser]);
+  }, [roomId, roomPassword, currentUser]);
 
   useEffect(() => {
     if (service) {
@@ -36,17 +40,15 @@ export default function MultiplayerWidget({ roomId, currentUser, isDead, focusSe
 
   useEffect(() => {
     // Check if I got slapped!
-    if (!service) return;
+    if (!service || !roomData.users) return;
     const myId = btoa(currentUser.email).substring(0, 15);
-    const me = users[myId];
+    const me = roomData.users[myId];
     if (me && me.slappedBy && me.slapTime) {
-      // Check if slap was recent (within 5 seconds) to avoid infinite loops on reload
       if (Date.now() - me.slapTime < 5000) {
-        // Play a sound or alert
         alert(`WAKE UP! You were slapped by ${me.slappedBy} for being distracted!`);
       }
     }
-  }, [users, currentUser]);
+  }, [roomData, currentUser, service]);
 
   const handleSlap = (userId) => {
     if (service) service.slapUser(userId);
@@ -54,21 +56,44 @@ export default function MultiplayerWidget({ roomId, currentUser, isDead, focusSe
 
   if (!roomId) return null;
 
+  const myId = btoa(currentUser.email).substring(0, 15);
+  const isHost = roomData.hostId === myId;
+  
+  // If I am still pending according to the database
+  const currentlyPending = isPending && roomData.pending && roomData.pending[myId];
+
   return (
     <div className="glass-panel" style={{ padding: '15px', color: 'var(--text-main)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
-        <Users size={16} /> Room: {roomId.toUpperCase()}
+        <Users size={16} /> Room: {roomId.toUpperCase()} {isHost && '(Host)'}
       </h3>
 
       {error ? (
         <div style={{ color: 'var(--danger)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}>
           <AlertTriangle size={14} /> {error}
         </div>
+      ) : currentlyPending ? (
+        <div style={{ fontSize: '0.9rem', color: 'var(--accent-cyan)', textAlign: 'center', padding: '20px 0' }}>
+          Waiting for Host to Accept...
+        </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-          {Object.entries(users).map(([id, u]) => {
+          {isHost && roomData.pending && Object.entries(roomData.pending).map(([id, u]) => (
+            <div key={id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px', background: 'rgba(255,150,0,0.2)', borderRadius: '8px', borderLeft: '3px solid orange' }}>
+              <div>
+                <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{u.name}</span>
+                <span style={{ fontSize: '0.7rem', color: 'orange', display: 'block' }}>Wants to join</span>
+              </div>
+              <div style={{ display: 'flex', gap: '5px' }}>
+                <button onClick={() => service.acceptUser(id, u.name)} style={{ background: 'var(--accent-cyan)', color: 'black', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '0 8px' }}>✓</button>
+                <button onClick={() => service.rejectUser(id)} style={{ background: 'var(--danger)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', padding: '0 8px' }}>✕</button>
+              </div>
+            </div>
+          ))}
+
+          {roomData.users && Object.entries(roomData.users).map(([id, u]) => {
             if (!u) return null;
-            const isMe = id === btoa(currentUser.email).substring(0, 15);
+            const isMe = id === myId;
             return (
               <div key={id} style={{ 
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', 

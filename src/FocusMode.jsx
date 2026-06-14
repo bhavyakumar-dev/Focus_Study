@@ -240,6 +240,7 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints, currentUse
         <WidgetPanel title="Multiplayer Sync" defaultPosition={{ x: 20, y: 600 }} isLocked={isWidgetsLocked}>
           <MultiplayerWidget 
             roomId={sessionData.roomId} 
+            roomPassword={sessionData.roomPassword}
             currentUser={currentUser} 
             isDead={isDead} 
             focusSeconds={focusSeconds} 

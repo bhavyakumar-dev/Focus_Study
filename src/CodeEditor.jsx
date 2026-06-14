@@ -80,7 +80,11 @@ export default function CodeEditor() {
 
   // ─── Monaco Editor Initialization (runs once) ───
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.require && !window.nodeRequire) {
+    // Determine if we are running in Electron
+    const isElectronEnv = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().indexOf(' electron/') > -1;
+    
+    // Attempt to save Node's require if in Electron
+    if (isElectronEnv && typeof window !== 'undefined' && window.require && !window.nodeRequire) {
       window.nodeRequire = window.require;
       delete window.require;
       delete window.exports;
@@ -247,14 +251,15 @@ export default function CodeEditor() {
     setIsRunning(true);
     setOutput(prev => prev + '\n--- Running ' + activeFile.name + ' ---\n');
 
-    const isElectron = typeof window !== 'undefined' && window.nodeRequire;
+    const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().indexOf(' electron/') > -1;
 
     if (isElectron) {
       try {
-        const fs = window.nodeRequire('fs');
-        const path = window.nodeRequire('path');
-        const { exec } = window.nodeRequire('child_process');
-        const os = window.nodeRequire('os');
+        const req = window.nodeRequire || window.require;
+        const fs = req('fs');
+        const path = req('path');
+        const { exec } = req('child_process');
+        const os = req('os');
 
         const config = {
           javascript: { ext: 'js', cmd: 'node' },
@@ -415,7 +420,7 @@ sys.stderr = io.StringIO()
     setTerminalHistory(prev => [...prev, cmd]);
     setHistoryIndex(-1);
     
-    const isElectron = typeof window !== 'undefined' && window.nodeRequire;
+    const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().indexOf(' electron/') > -1;
     if (!isElectron) {
       // Web terminal: support basic commands
       if (cmd === 'clear' || cmd === 'cls') {
@@ -433,8 +438,10 @@ sys.stderr = io.StringIO()
     }
 
     try {
-      const { exec } = window.nodeRequire('child_process');
-      const os = window.nodeRequire('os');
+      // In Electron, if Monaco loaded, it might have saved Node's require as nodeRequire
+      const req = window.nodeRequire || window.require;
+      const { exec } = req('child_process');
+      const os = req('os');
       const tmpDir = os.tmpdir();
       
       if (cmd === 'clear' || cmd === 'cls') {

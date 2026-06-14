@@ -43,6 +43,7 @@ export default function CodeEditor() {
   const [terminalInput, setTerminalInput] = useState('');
   const [terminalHistory, setTerminalHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [renamingFileId, setRenamingFileId] = useState(null);
   
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
@@ -166,6 +167,21 @@ export default function CodeEditor() {
     setFiles(remaining);
     if (activeFileId === fileId) {
       setActiveFileId(remaining[remaining.length - 1].id);
+    }
+  };
+
+  const startRename = (e, fileId) => {
+    e.stopPropagation();
+    setRenamingFileId(fileId);
+  };
+
+  const finishRename = () => {
+    setRenamingFileId(null);
+  };
+
+  const handleRenameInput = (e, fileId) => {
+    if (e.key === 'Enter') {
+      finishRename();
     }
   };
 
@@ -521,17 +537,31 @@ sys.stderr = io.StringIO()
                 color: f.id === activeFileId ? '#fff' : '#aaa',
                 cursor: 'pointer', borderLeft: f.id === activeFileId ? '2px solid var(--accent-cyan)' : '2px solid transparent',
                 fontSize: '0.85rem',
-                transition: 'background 0.15s ease'
+                transition: 'background 0.15s ease',
+                userSelect: 'none'
               }}
             >
               <FileCode size={13} style={{ flexShrink: 0 }} /> 
-              <input 
-                type="text" 
-                value={f.name}
-                onChange={(e) => setFiles(prev => prev.map(file => file.id === f.id ? { ...file, name: e.target.value } : file))}
-                onClick={(e) => e.stopPropagation()}
-                style={{ background: 'transparent', border: 'none', color: 'inherit', outline: 'none', width: '100%', fontSize: '0.82rem', fontFamily: 'inherit' }}
-              />
+              {renamingFileId === f.id ? (
+                <input 
+                  autoFocus
+                  type="text" 
+                  value={f.name}
+                  onChange={(e) => setFiles(prev => prev.map(file => file.id === f.id ? { ...file, name: e.target.value } : file))}
+                  onBlur={finishRename}
+                  onKeyDown={(e) => handleRenameInput(e, f.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ background: '#252526', border: '1px solid var(--accent-cyan)', color: 'inherit', outline: 'none', width: '100%', fontSize: '0.82rem', fontFamily: 'inherit', padding: '2px 4px' }}
+                />
+              ) : (
+                <span 
+                  onDoubleClick={(e) => startRename(e, f.id)}
+                  title="Double-click to rename"
+                  style={{ width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                  {f.name}
+                </span>
+              )}
             </div>
           ))}
         </div>

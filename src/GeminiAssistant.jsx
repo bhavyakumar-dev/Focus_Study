@@ -60,15 +60,6 @@ function GeminiAssistant({ apiKey }) {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
-    const userMsg = input.trim();
-    setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-    callGeminiAPI(userMsg, messages);
-  };
 
   const handleSummarize = () => {
     if (!apiKey || isLoading) return;

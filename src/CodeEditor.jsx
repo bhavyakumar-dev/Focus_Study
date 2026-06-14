@@ -64,8 +64,101 @@ export default function CodeEditor() {
     setIsRunning(true);
     setOutput('Compiling/Running...');
 
+    const isElectron = typeof window !== 'undefined' && window.require;
+
+    if (isElectron) {
+      try {
+        const fs = window.require('fs');
+        const path = window.require('path');
+        const { exec } = window.require('child_process');
+        const os = window.require('os');
+
+        const config = {
+          javascript: { ext: 'js', cmd: 'node' },
+          python: { ext: 'py', cmd: 'python' },
+          cpp: { ext: 'cpp', cmd: 'g++' },
+          java: { ext: 'java', cmd: 'java' }
+        };
+
+        if (!config[language]) {
+          setOutput(`Local execution for ${language} is not supported yet.`);
+          setIsRunning(false);
+          return;
+        }
+
+        const tmpDir = os.tmpdir();
+        const fileName = `focus_exec_${Date.now()}.${config[language].ext}`;
+        const filePath = path.join(tmpDir, fileName);
+
+        fs.writeFileSync(filePath, code);
+
+        let command = `${config[language].cmd} "${filePath}"`;
+        if (language === 'cpp') {
+           const outPath = path.join(tmpDir, `focus_exec_${Date.now()}.exe`);
+           command = `g++ "${filePath}" -o "${outPath}" && "${outPath}"`;
+        }
+
+        exec(command, async (error, stdout, stderr) => {
+          if (error) {
+             let errorMsg = stderr || error.message;
+             
+             // AI AUTO INSTALLER LOGIC
+             if (errorMsg.includes('ModuleNotFoundError') || errorMsg.includes('Cannot find module')) {
+                setOutput('Missing module detected. Asking AI to auto-install...');
+                const geminiKey = localStorage.getItem('geminiKey');
+                if (geminiKey) {
+                   try {
+                     const ai = new GoogleGenAI({ apiKey: geminiKey });
+                     const prompt = `The following ${language} code failed to execute due to a missing package. 
+Error: ${errorMsg}
+Provide ONLY the terminal command to install the missing package globally or locally (e.g., 'pip install requests' or 'npm install axios'). Do NOT include any markdown or explanation.`;
+                     const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+                     const installCmd = response.text?.trim();
+                     if (installCmd && !installCmd.includes('```')) {
+                        setOutput(`Auto-installing via: ${installCmd}...`);
+                        exec(installCmd, { cwd: tmpDir }, (iErr, iStd, iSerr) => {
+                           if (iErr) {
+                              setOutput(`Auto-install failed.\n${iSerr || iErr.message}`);
+                              setIsRunning(false);
+                           } else {
+                              setOutput('Auto-install complete! Re-running code...');
+                              exec(command, (rErr, rStd, rSerr) => {
+                                  setOutput(rErr ? (rSerr || rErr.message) : rStd);
+                                  setIsRunning(false);
+                              });
+                           }
+                        });
+                        return; // Wait for install and re-run
+                     }
+                   } catch (aiErr) {
+                     console.error("AI Install Failed:", aiErr);
+                   }
+                }
+             }
+
+             // Write to Crash Log
+             try {
+                const crashLogPath = path.join(os.homedir(), 'Documents', 'Focus_CrashLogs.txt');
+                const logEntry = `\n[${new Date().toISOString()}] EXECUTION CRASH\nLanguage: ${language}\nError: ${errorMsg}\n`;
+                fs.appendFileSync(crashLogPath, logEntry);
+             } catch(e) {}
+
+             setOutput('Error: ' + errorMsg);
+          } else {
+             setOutput(stdout);
+          }
+          setIsRunning(false);
+        });
+        return; // Native execution handed off to async child_process
+      } catch (e) {
+         setOutput('Local Exec System Error: ' + e.message);
+         setIsRunning(false);
+         return;
+      }
+    }
+
     if (language === 'javascript') {
-      // Native JS Execution in browser
+      // Native JS Execution in browser (Web Mode)
       let consoleOutput = [];
       const originalLog = console.log;
       const originalError = console.error;
@@ -94,10 +187,10 @@ export default function CodeEditor() {
       return;
     }
 
-    // For other languages, use AI Simulation since public compilers are blocked
+    // For other languages in Web Mode, use AI Simulation
     const geminiKey = localStorage.getItem('geminiKey');
     if (!geminiKey) {
-      setOutput('The public Piston Compiler API was shut down.\n\nPlease enter a Gemini API Key in the Setup Screen Options to enable the AI Code Simulator for Python, C++, Java, and Rust. \n\n(JavaScript will continue to run natively offline without a key).');
+      setOutput('The public Compiler API was shut down.\n\nPlease enter a Gemini API Key in the Setup Screen Options to enable the AI Code Simulator for Python, C++, Java, and Rust. \n\n(JavaScript will continue to run natively offline without a key, or you can use the Windows .exe version for native execution of all languages).');
       setIsRunning(false);
       return;
     }

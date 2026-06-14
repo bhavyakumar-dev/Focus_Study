@@ -17,10 +17,19 @@ export default function CodeEditor() {
   const containerRef = useRef(null);
 
   useEffect(() => {
+    // FIX: Electron's nodeIntegration adds `window.require`, which conflicts with Monaco's AMD loader.
+    if (typeof window !== 'undefined' && window.require && !window.nodeRequire) {
+      window.nodeRequire = window.require;
+      delete window.require;
+      delete window.exports;
+      delete window.module;
+    }
+
     // Load Monaco via CDN directly to bypass npm hangs
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs/loader.min.js';
     script.onload = () => {
+      // Now window.require belongs to Monaco
       window.require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs' }});
       window.require(['vs/editor/editor.main'], function() {
         if (containerRef.current) {
@@ -64,14 +73,14 @@ export default function CodeEditor() {
     setIsRunning(true);
     setOutput('Compiling/Running...');
 
-    const isElectron = typeof window !== 'undefined' && window.require;
+    const isElectron = typeof window !== 'undefined' && window.nodeRequire;
 
     if (isElectron) {
       try {
-        const fs = window.require('fs');
-        const path = window.require('path');
-        const { exec } = window.require('child_process');
-        const os = window.require('os');
+        const fs = window.nodeRequire('fs');
+        const path = window.nodeRequire('path');
+        const { exec } = window.nodeRequire('child_process');
+        const os = window.nodeRequire('os');
 
         const config = {
           javascript: { ext: 'js', cmd: 'node' },
@@ -85,6 +94,40 @@ export default function CodeEditor() {
           setIsRunning(false);
           return;
         }
+
+        // 🛡️ SECURITY BARRIER (Regex)
+        const dangerousPatterns = ['rm -rf', 'mkfs', 'del /s /q', 'format C:'];
+        if (dangerousPatterns.some(kw => code.includes(kw))) {
+          setOutput('SECURITY ALERT: Malicious commands detected. Execution blocked.');
+          setIsRunning(false);
+          return;
+        }
+
+        // 🤖 SECURITY BARRIER (AI Screener)
+        const geminiKey = localStorage.getItem('geminiKey');
+        if (geminiKey) {
+           setOutput('Running AI Security Scan...');
+           try {
+             const ai = new GoogleGenAI({ apiKey: geminiKey });
+             const prompt = `You are an elite cybersecurity agent embedded in a code compiler. The user is attempting to run this ${language} code natively on their machine:
+\`\`\`${language}
+${code}
+\`\`\`
+Analyze the code for malicious behavior (e.g. destructive file operations, unauthorized network reverse shells, dropping malware). 
+If it is safe, output EXACTLY the word "SAFE". If it is malicious, output "MALICIOUS:" followed by a short reason.`;
+             const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+             const evaluation = response.text?.trim() || 'SAFE';
+             if (!evaluation.startsWith('SAFE')) {
+                setOutput('SECURITY ALERT: Execution blocked by AI Screener.\nReason: ' + evaluation);
+                setIsRunning(false);
+                return;
+             }
+           } catch (e) {
+             console.warn("AI Screener offline, proceeding with caution.");
+           }
+        }
+
+        setOutput('Compiling/Running...');
 
         const tmpDir = os.tmpdir();
         const fileName = `focus_exec_${Date.now()}.${config[language].ext}`;
@@ -138,10 +181,16 @@ Provide ONLY the terminal command to install the missing package globally or loc
 
              // Write to Crash Log
              try {
-                const crashLogPath = path.join(os.homedir(), 'Documents', 'Focus_CrashLogs.txt');
+                const focusDir = path.join(os.homedir(), '.focus_ide');
+                if (!fs.existsSync(focusDir)) {
+                   fs.mkdirSync(focusDir);
+                }
+                const crashLogPath = path.join(focusDir, 'crash_logs.txt');
                 const logEntry = `\n[${new Date().toISOString()}] EXECUTION CRASH\nLanguage: ${language}\nError: ${errorMsg}\n`;
                 fs.appendFileSync(crashLogPath, logEntry);
-             } catch(e) {}
+             } catch(e) {
+                console.error("Failed to write crash log", e);
+             }
 
              setOutput('Error: ' + errorMsg);
           } else {

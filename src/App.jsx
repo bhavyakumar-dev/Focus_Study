@@ -33,18 +33,31 @@ function App() {
 
   const handleEndFocus = (success, pointsEarned) => {
     setIsFocusMode(false);
+    
+    const today = new Date().toLocaleDateString();
+    const lastStreakDate = localStorage.getItem('lastStreakDate');
+
     if (success) {
-      setStats((prev) => ({
-        ...prev,
-        points: prev.points + pointsEarned,
-        streak: prev.streak + 1,
-      }));
+      setStats((prev) => {
+        let newStreak = prev.streak;
+        // Only increment streak if they haven't succeeded today yet
+        if (lastStreakDate !== today) {
+          newStreak += 1;
+          localStorage.setItem('lastStreakDate', today);
+        }
+        return {
+          ...prev,
+          points: prev.points + pointsEarned,
+          streak: newStreak,
+        };
+      });
     } else {
       setStats((prev) => ({
         ...prev,
         points: prev.points,
         streak: 0, // Reset streak on failure
       }));
+      localStorage.removeItem('lastStreakDate'); // Clear date so they can restart streak tomorrow or today
     }
   };
 

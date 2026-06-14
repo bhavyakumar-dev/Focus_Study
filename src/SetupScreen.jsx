@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Play, Flame, Award, Settings2, Shield } from 'lucide-react';
+import { Play, Flame, Award, Settings2, Shield, Wand2 } from 'lucide-react';
+import { GoogleGenAI } from '@google/genai';
 import { getRankFromPoints } from './utils/levels';
 
 export default function SetupScreen({ onStart, stats, initialGeminiKey }) {
@@ -12,6 +13,44 @@ export default function SetupScreen({ onStart, stats, initialGeminiKey }) {
   const [isPomodoro, setIsPomodoro] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState('');
+  const [isGeneratingPlaylist, setIsGeneratingPlaylist] = useState(false);
+
+  const handleGeneratePlaylist = async () => {
+    if (!geminiKey) {
+      return setError('Please enter a Gemini API Key first to generate a playlist.');
+    }
+    const topic = prompt('What are you focusing on today? (e.g., Coding, Math, Reading, Lo-Fi)');
+    if (!topic) return;
+
+    setIsGeneratingPlaylist(true);
+    setError('');
+    try {
+      const ai = new GoogleGenAI({ apiKey: geminiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: `I am studying/working on: "${topic}". Give me ONLY a single valid Spotify Playlist ID that is great for focusing on this topic. Do not output URLs, JSON, markdown, or any explanation. ONLY the 22-character alphanumeric ID.` }]
+          }
+        ]
+      });
+      const generatedId = response.text?.trim();
+      if (generatedId) {
+        // Build the embed URL based on the ID returned. If the AI returns a full URL by accident, we just use it directly.
+        if (generatedId.includes('http')) {
+          setSpotifyUrl(generatedId);
+        } else {
+          setSpotifyUrl(`https://open.spotify.com/playlist/${generatedId}`);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setError('AI Playlist Generation failed. Check API key or network.');
+    } finally {
+      setIsGeneratingPlaylist(false);
+    }
+  };
 
   const rankInfo = getRankFromPoints(stats.points);
 
@@ -142,19 +181,31 @@ export default function SetupScreen({ onStart, stats, initialGeminiKey }) {
           {showAdvanced && (
             <div className="minimal-advanced-panel">
               <input 
-                type="text" 
-                className="minimal-sub-input" 
-                placeholder="Spotify Playlist URL (Optional)" 
-                value={spotifyUrl}
-                onChange={(e) => setSpotifyUrl(e.target.value)}
-              />
-              <input 
                 type="password" 
                 className="minimal-sub-input" 
-                placeholder="Gemini API Key (Optional)" 
+                placeholder="Gemini API Key (Needed for AI Assistant & Playlist)" 
                 value={geminiKey}
                 onChange={(e) => setGeminiKey(e.target.value)}
               />
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input 
+                  type="text" 
+                  className="minimal-sub-input" 
+                  style={{ flex: 1 }}
+                  placeholder="Spotify Playlist URL (Optional)" 
+                  value={spotifyUrl}
+                  onChange={(e) => setSpotifyUrl(e.target.value)}
+                />
+                <button 
+                  type="button" 
+                  className="minimal-upload-btn"
+                  onClick={handleGeneratePlaylist}
+                  disabled={isGeneratingPlaylist}
+                  style={{ backgroundColor: 'rgba(189, 147, 249, 0.2)', color: '#bd93f9', border: '1px solid rgba(189, 147, 249, 0.4)' }}
+                >
+                  <Wand2 size={14} /> {isGeneratingPlaylist ? '...' : 'AI Generate'}
+                </button>
+              </div>
               <input 
                 type="password" 
                 className="minimal-sub-input" 

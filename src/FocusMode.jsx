@@ -11,6 +11,8 @@ import TaskManager from './TaskManager';
 import Scratchpad from './Scratchpad';
 import CodeEditor from './CodeEditor';
 import { getRankFromPoints } from './utils/levels';
+import { Lock, Unlock } from 'lucide-react';
+import WidgetPanel from './WidgetPanel';
 
 function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
   const [isPlaying, setIsPlaying] = useState(true);
@@ -18,6 +20,7 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
   const [isDead, setIsDead] = useState(false);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
+  const [isWidgetsLocked, setIsWidgetsLocked] = useState(true);
   
   // Pomodoro States
   const [pomodoroPhase, setPomodoroPhase] = useState('work'); // 'work' or 'break'
@@ -158,35 +161,38 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
   return (
     <div className="focus-container" ref={containerRef}>
       
-      {/* Gamification Core */}
-      <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 40, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <FocusTracker focusSeconds={focusSeconds} isDead={isDead} />
-        
-        {/* Pomodoro Display */}
-        {sessionData.isPomodoro && (
-          <div className="glass-panel" style={{ padding: '10px 15px', color: pomodoroPhase === 'work' ? 'var(--danger)' : 'var(--accent-cyan)' }}>
-            <div style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase' }}>
-              {pomodoroPhase === 'work' ? 'FOCUS PHASE' : 'BREAK TIME (FREE ROAM)'}
+      {/* Lock Widgets Toggle */}
+      <button 
+        className="sidebar-toggle-btn"
+        onClick={() => setIsWidgetsLocked(!isWidgetsLocked)}
+        style={{ right: '20px', top: '20px', zIndex: 1000, background: isWidgetsLocked ? 'rgba(0,0,0,0.5)' : 'var(--danger)' }}
+        title="Toggle Widget Dragging"
+      >
+        {isWidgetsLocked ? <Lock size={20} /> : <Unlock size={20} />}
+      </button>
+
+      {/* Gamification Core Widget */}
+      <WidgetPanel title="Core" defaultPosition={{ x: 20, y: 20 }} isLocked={isWidgetsLocked} zIndex={40}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <FocusTracker focusSeconds={focusSeconds} isDead={isDead} />
+          
+          {/* Pomodoro Display */}
+          {sessionData.isPomodoro && (
+            <div className="glass-panel" style={{ padding: '10px 15px', color: pomodoroPhase === 'work' ? 'var(--danger)' : 'var(--accent-cyan)' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                {pomodoroPhase === 'work' ? 'FOCUS PHASE' : 'BREAK TIME (FREE ROAM)'}
+              </div>
+              <div style={{ fontSize: '1.5rem', fontFamily: 'monospace' }}>
+                {Math.floor(pomodoroTimeLeft / 60).toString().padStart(2, '0')}:
+                {(pomodoroTimeLeft % 60).toString().padStart(2, '0')}
+              </div>
             </div>
-            <div style={{ fontSize: '1.5rem', fontFamily: 'monospace' }}>
-              {Math.floor(pomodoroTimeLeft / 60).toString().padStart(2, '0')}:
-              {(pomodoroTimeLeft % 60).toString().padStart(2, '0')}
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </WidgetPanel>
 
       {/* Main Content Area */}
-      <div className="video-section">
-        {/* Collapsible Sidebar Toggle */}
-        <button 
-          className="sidebar-toggle-btn"
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          style={{ right: isSidebarOpen ? '370px' : '20px' }}
-        >
-          {isSidebarOpen ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
-        </button>
-
+      <div className="video-section" style={{ paddingRight: 0 }}>
         {sessionData.materialType === 'youtube' ? (
           <VideoPlayer 
             videoUrl={sessionData.videoUrl} 
@@ -200,30 +206,35 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
         )}
       </div>
 
-      {/* Sidebar Area: Utilities, AI, & Media */}
-      <div className={`sidebar-section ${!isSidebarOpen ? 'sidebar-collapsed' : ''}`}>
-          {sessionData.geminiKey && (
-            <GeminiAssistant apiKey={sessionData.geminiKey} />
-          )}
-          
-          {/* Ambient Sounds */}
-          <AmbientMixer />
+      {/* Draggable Widgets */}
+      {sessionData.geminiKey && (
+        <WidgetPanel title="AI Assistant" defaultPosition={{ x: 800, y: 80 }} isLocked={isWidgetsLocked}>
+          <GeminiAssistant apiKey={sessionData.geminiKey} />
+        </WidgetPanel>
+      )}
+      
+      <WidgetPanel title="Ambient Sounds" defaultPosition={{ x: 800, y: 450 }} isLocked={isWidgetsLocked}>
+        <AmbientMixer />
+      </WidgetPanel>
 
-          {/* Task Manager */}
-          <TaskManager />
+      <WidgetPanel title="Task Manager" defaultPosition={{ x: 800, y: 600 }} isLocked={isWidgetsLocked}>
+        <TaskManager />
+      </WidgetPanel>
 
-          {/* Quick Notes */}
-          <Scratchpad />
+      <WidgetPanel title="Quick Notes" defaultPosition={{ x: 20, y: 200 }} isLocked={isWidgetsLocked}>
+        <Scratchpad />
+      </WidgetPanel>
 
-          {sessionData.spotifyEmbedUrl && (
-            <SpotifyPlayer 
-              embedUrl={sessionData.spotifyEmbedUrl} 
-              globalPoints={globalPoints} 
-              onSpendPoints={onSpendPoints} 
-              isPlaying={isPlaying}
-            />
-          )}
-        </div>
+      {sessionData.spotifyEmbedUrl && (
+        <WidgetPanel title="Spotify" defaultPosition={{ x: 300, y: 20 }} isLocked={isWidgetsLocked}>
+          <SpotifyPlayer 
+            embedUrl={sessionData.spotifyEmbedUrl} 
+            globalPoints={globalPoints} 
+            onSpendPoints={onSpendPoints} 
+            isPlaying={isPlaying}
+          />
+        </WidgetPanel>
+      )}
 
       {/* Overlays */}
       {showWarning && (

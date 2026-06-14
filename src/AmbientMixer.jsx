@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Waves, Wind, Activity } from 'lucide-react';
+import { Waves, Wind, Activity, CloudRain } from 'lucide-react';
 
 export default function AmbientMixer() {
-  const [volumes, setVolumes] = useState({ brown: 0, pink: 0, white: 0 });
+  const [volumes, setVolumes] = useState({ brown: 0, pink: 0, white: 0, rain: 0 });
   const audioCtxRef = useRef(null);
   const nodesRef = useRef({});
 
@@ -39,13 +39,35 @@ export default function AmbientMixer() {
 
       const setupNode = (type) => {
         const source = ctx.createBufferSource();
-        source.buffer = createNoise(type);
+        // Rain uses white noise as the base, then filters it
+        source.buffer = createNoise(type === 'rain' ? 'white' : type);
         source.loop = true;
+        
+        let lastNode = source;
+
+        if (type === 'rain') {
+          const filter = ctx.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.value = 1000;
+          
+          // Modulate filter to simulate wind/gusts of rain
+          const lfo = ctx.createOscillator();
+          lfo.type = 'sine';
+          lfo.frequency.value = 0.2; // slow gusts
+          const lfoGain = ctx.createGain();
+          lfoGain.gain.value = 500;
+          lfo.connect(lfoGain);
+          lfoGain.connect(filter.frequency);
+          lfo.start();
+
+          source.connect(filter);
+          lastNode = filter;
+        }
         
         const gainNode = ctx.createGain();
         gainNode.gain.value = 0; // start muted
         
-        source.connect(gainNode);
+        lastNode.connect(gainNode);
         gainNode.connect(ctx.destination);
         source.start();
         
@@ -55,7 +77,8 @@ export default function AmbientMixer() {
       nodesRef.current = {
         brown: setupNode('brown'),
         pink: setupNode('pink'),
-        white: setupNode('white')
+        white: setupNode('white'),
+        rain: setupNode('rain')
       };
     }
     
@@ -109,9 +132,15 @@ export default function AmbientMixer() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Activity size={18} color={volumes.white > 0 ? "var(--text-main)" : "var(--text-muted)"} />
+          <Activity size={18} color={volumes.white > 0 ? "white" : "var(--text-muted)"} />
           <div style={{ width: '80px', fontSize: '0.8rem' }}>White Noise</div>
           <input type="range" min="0" max="100" value={volumes.white} onChange={(e) => handleVolumeChange('white', parseInt(e.target.value))} style={{ flex: 1, accentColor: 'white' }} />
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <CloudRain size={18} color={volumes.rain > 0 ? "#3b82f6" : "var(--text-muted)"} />
+          <div style={{ width: '80px', fontSize: '0.8rem' }}>Heavy Rain</div>
+          <input type="range" min="0" max="100" value={volumes.rain} onChange={(e) => handleVolumeChange('rain', parseInt(e.target.value))} style={{ flex: 1, accentColor: '#3b82f6' }} />
         </div>
       </div>
     </div>

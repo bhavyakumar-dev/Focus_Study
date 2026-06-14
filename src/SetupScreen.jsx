@@ -1,222 +1,177 @@
 import { useState } from 'react';
-import { Play, Flame, Award, FileText, Video, Music, Star } from 'lucide-react';
+import { Play, Flame, Award, Settings2, Shield } from 'lucide-react';
 import { getRankFromPoints } from './utils/levels';
 
-function SetupScreen({ onStart, stats, initialGeminiKey }) {
-  const [materialType, setMaterialType] = useState('youtube'); // 'youtube' or 'pdf'
+export default function SetupScreen({ onStart, stats, initialGeminiKey }) {
+  const [materialType, setMaterialType] = useState('youtube');
   const [videoUrl, setVideoUrl] = useState('');
-  const [pdfFile, setPdfFile] = useState(null);
+  const [pdfUrl, setPdfUrl] = useState('');
   const [password, setPassword] = useState('');
   const [geminiKey, setGeminiKey] = useState(initialGeminiKey || '');
   const [spotifyUrl, setSpotifyUrl] = useState('');
   const [isPomodoro, setIsPomodoro] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState('');
+
+  const rankInfo = getRankFromPoints(stats.points);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    let finalPdfUrl = null;
-
-    if (materialType === 'youtube') {
-      if (!videoUrl.includes('youtube.com') && !videoUrl.includes('youtu.be')) {
-        setError('Please enter a valid YouTube URL');
-        return;
-      }
-    } else {
-      if (!pdfFile) {
-        setError('Please select a PDF file');
-        return;
-      }
-      finalPdfUrl = URL.createObjectURL(pdfFile);
-    }
-
-    if (!password) {
-      setError('Please set an emergency exit password');
-      return;
-    }
-    
-    // Validate Spotify URL if provided
-    let spotifyId = '';
-    let spotifyType = '';
-    if (spotifyUrl) {
-      if (!spotifyUrl.includes('spotify.com')) {
-        setError('Please enter a valid Spotify URL or leave blank');
-        return;
-      }
-      try {
-        const urlObj = new URL(spotifyUrl);
-        const parts = urlObj.pathname.split('/').filter(Boolean);
-        if (parts.length >= 2) {
-          spotifyType = parts[0]; // e.g., 'playlist', 'album', 'track'
-          spotifyId = parts[1];
-        }
-      } catch (e) {
-        setError('Invalid Spotify URL');
-        return;
-      }
-    }
-
     setError('');
-    
+
+    let finalPdfUrl = pdfUrl;
+    if (materialType === 'youtube') {
+      if (!videoUrl) return setError('Please enter a YouTube URL');
+      try { new URL(videoUrl); } catch { return setError('Invalid YouTube URL'); }
+    } else {
+      if (!pdfUrl) return setError('Please enter a PDF URL or upload one');
+    }
+
+    let spotifyId = '';
+    let spotifyType = 'playlist';
+    if (spotifyUrl) {
+      const trackMatch = spotifyUrl.match(/track\/([a-zA-Z0-9]+)/);
+      const playlistMatch = spotifyUrl.match(/playlist\/([a-zA-Z0-9]+)/);
+      const albumMatch = spotifyUrl.match(/album\/([a-zA-Z0-9]+)/);
+      
+      if (trackMatch) { spotifyId = trackMatch[1]; spotifyType = 'track'; }
+      else if (playlistMatch) { spotifyId = playlistMatch[1]; spotifyType = 'playlist'; }
+      else if (albumMatch) { spotifyId = albumMatch[1]; spotifyType = 'album'; }
+    }
+
     onStart({ 
       materialType,
       videoUrl: materialType === 'youtube' ? videoUrl : '', 
       pdfUrl: finalPdfUrl,
       password, 
       geminiKey,
-      spotifyEmbedUrl: spotifyId ? `https://open.spotify.com/embed/${spotifyType}/${spotifyId}?utm_source=generator` : '',
+      spotifyEmbedUrl: spotifyId ? `https://open.spotify.com/embed/${spotifyType}/${spotifyId}?utm_source=generator&theme=0` : '',
       isPomodoro
     });
   };
 
-  const rankInfo = getRankFromPoints(stats.points);
-
-  const QUOTES = [
-    "“You have power over your mind - not outside events. Realize this, and you will find strength.” – Marcus Aurelius",
-    "“We suffer more often in imagination than in reality.” – Seneca",
-    "“Focus is a matter of deciding what things you're not going to do.” – John Carmack",
-    "“The successful warrior is the average man, with laser-like focus.” – Bruce Lee",
-    "“Concentrate all your thoughts upon the work at hand. The sun's rays do not burn until brought to a focus.” – Alexander Graham Bell"
-  ];
-  
-  // Pick a random quote on mount, but keep it stable during render
-  const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]);
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (file && file.type === 'application/pdf') {
+      const fileUrl = URL.createObjectURL(file);
+      setPdfUrl(fileUrl);
+    } else {
+      setError('Please upload a valid PDF file.');
+    }
+  };
 
   return (
-    <div className="setup-container">
-      <div className="setup-card glass-panel">
-        <h1 className="setup-title">FOCUS CORE</h1>
-        
-        <div style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic', marginBottom: '10px', padding: '0 20px' }}>
-          {quote}
+    <div className="minimal-setup-wrapper">
+      
+      {/* Top Right Stats Badge */}
+      <div className="minimal-stats-badge">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Flame size={14} color="var(--danger)" /> {stats.streak}
         </div>
-        
-        <div className="stats-container" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '15px' }}>
-            <div className="stat-item" style={{ flex: 1 }}>
-              <div className="stat-value" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                <Flame size={24} color="var(--danger)" /> {stats.streak}
-              </div>
-              <div className="stat-label">Day Streak</div>
-            </div>
-            <div className="stat-item" style={{ flex: 1 }}>
-              <div className="stat-value" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', color: rankInfo.color }}>
-                <Award size={24} color={rankInfo.color} /> Lvl {rankInfo.level}
-              </div>
-              <div className="stat-label">{rankInfo.title}</div>
-            </div>
-          </div>
-          
-          {/* Rank Progress Bar */}
-          <div style={{ padding: '0 10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
-              <span>{stats.points} XP</span>
-              <span>{rankInfo.nextRankPoints ? `${rankInfo.nextRankPoints} XP` : 'MAX'}</span>
-            </div>
-            <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
-              <div style={{ width: `${rankInfo.progressToNextRank}%`, height: '100%', background: rankInfo.color, transition: 'width 0.5s ease' }}></div>
-            </div>
-          </div>
+        <div style={{ width: '1px', height: '12px', background: 'rgba(255,255,255,0.2)' }}></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: rankInfo.color }}>
+          <Award size={14} /> Lvl {rankInfo.level}
         </div>
+      </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+      <div className="minimal-container">
+        
+        <h1 className="minimal-title">F O C U S</h1>
+        <p className="minimal-subtitle">Enter your study material to begin.</p>
+
+        <form onSubmit={handleSubmit} className="minimal-form">
           
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div className="minimal-toggle-group">
             <button 
-              type="button"
-              className={`premium-button ${materialType === 'youtube' ? '' : 'danger-button'}`}
-              style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '10px', background: materialType === 'youtube' ? '' : 'rgba(255,255,255,0.05)', color: materialType === 'youtube' ? '' : 'var(--text-muted)', border: '1px solid var(--glass-border)' }}
+              type="button" 
+              className={`minimal-toggle-btn ${materialType === 'youtube' ? 'active' : ''}`}
               onClick={() => setMaterialType('youtube')}
             >
-              <Video size={20}/> Video
+              YouTube
             </button>
             <button 
-              type="button"
-              className={`premium-button ${materialType === 'pdf' ? '' : 'danger-button'}`}
-              style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '10px', background: materialType === 'pdf' ? '' : 'rgba(255,255,255,0.05)', color: materialType === 'pdf' ? '' : 'var(--text-muted)', border: '1px solid var(--glass-border)' }}
+              type="button" 
+              className={`minimal-toggle-btn ${materialType === 'pdf' ? 'active' : ''}`}
               onClick={() => setMaterialType('pdf')}
             >
-              <FileText size={20}/> PDF
+              PDF Document
             </button>
           </div>
 
-          {materialType === 'youtube' ? (
-            <div>
-              <label className="stat-label" style={{ display: 'block', marginBottom: '5px' }}>YouTube Video URL</label>
+          <div className="minimal-input-wrapper">
+            {materialType === 'youtube' ? (
               <input 
                 type="text" 
-                className="premium-input" 
-                placeholder="https://www.youtube.com/watch?v=..." 
+                className="minimal-main-input" 
+                placeholder="Paste YouTube URL..." 
                 value={videoUrl}
                 onChange={(e) => setVideoUrl(e.target.value)}
               />
-            </div>
-          ) : (
-            <div>
-              <label className="stat-label" style={{ display: 'block', marginBottom: '5px' }}>Upload PDF Document</label>
+            ) : (
+              <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                <input 
+                  type="text" 
+                  className="minimal-main-input" 
+                  placeholder="Paste PDF URL..." 
+                  value={pdfUrl}
+                  onChange={(e) => setPdfUrl(e.target.value)}
+                />
+                <label className="minimal-upload-btn">
+                  Upload
+                  <input type="file" accept="application/pdf" style={{ display: 'none' }} onChange={handleFileUpload} />
+                </label>
+              </div>
+            )}
+          </div>
+
+          {/* Advanced Options Toggle */}
+          <button type="button" className="minimal-advanced-toggle" onClick={() => setShowAdvanced(!showAdvanced)}>
+            <Settings2 size={14} /> {showAdvanced ? 'Hide Options' : 'Options'}
+          </button>
+
+          {showAdvanced && (
+            <div className="minimal-advanced-panel">
               <input 
-                type="file" 
-                accept="application/pdf"
-                className="premium-input" 
-                onChange={(e) => setPdfFile(e.target.files[0])}
+                type="text" 
+                className="minimal-sub-input" 
+                placeholder="Spotify Playlist URL (Optional)" 
+                value={spotifyUrl}
+                onChange={(e) => setSpotifyUrl(e.target.value)}
               />
+              <input 
+                type="password" 
+                className="minimal-sub-input" 
+                placeholder="Gemini API Key (Optional)" 
+                value={geminiKey}
+                onChange={(e) => setGeminiKey(e.target.value)}
+              />
+              <input 
+                type="password" 
+                className="minimal-sub-input" 
+                placeholder="Emergency Exit Password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <label className="minimal-checkbox-label">
+                <input 
+                  type="checkbox" 
+                  checked={isPomodoro}
+                  onChange={(e) => setIsPomodoro(e.target.checked)}
+                />
+                Enable 25/5 Pomodoro Mode
+              </label>
             </div>
           )}
 
-          <div>
-            <label className="stat-label" style={{ display: 'block', marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Music size={14}/> Spotify Playlist / Album URL (Optional)
-            </label>
-            <input 
-              type="text" 
-              className="premium-input" 
-              placeholder="e.g. https://open.spotify.com/playlist/..." 
-              value={spotifyUrl}
-              onChange={(e) => setSpotifyUrl(e.target.value)}
-            />
-          </div>
+          {error && <div className="minimal-error">{error}</div>}
 
-          <div>
-            <label className="stat-label" style={{ display: 'block', marginBottom: '5px' }}>Gemini API Key (Optional)</label>
-            <input 
-              type="password" 
-              className="premium-input" 
-              placeholder="Leave blank to disable AI" 
-              value={geminiKey}
-              onChange={(e) => setGeminiKey(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="stat-label" style={{ display: 'block', marginBottom: '5px' }}>Emergency Exit Password</label>
-            <input 
-              type="password" 
-              className="premium-input" 
-              placeholder="Set a password to exit early" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
-            <input 
-              type="checkbox" 
-              id="pomodoro-toggle"
-              checked={isPomodoro}
-              onChange={(e) => setIsPomodoro(e.target.checked)}
-              style={{ width: '18px', height: '18px', accentColor: 'var(--accent-purple)' }}
-            />
-            <label htmlFor="pomodoro-toggle" className="stat-label" style={{ cursor: 'pointer' }}>Enable Pomodoro Mode (25m Focus / 5m Break)</label>
-          </div>
-
-          {error && <div className="error-text">{error}</div>}
-
-          <button type="submit" className="premium-button" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
-            <Play size={20} /> Initialize Core
+          <button type="submit" className="minimal-start-btn">
+            <Play size={16} fill="currentColor" /> INITIATE DEEP WORK
           </button>
+
         </form>
+
       </div>
     </div>
   );
 }
-
-export default SetupScreen;

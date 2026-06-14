@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import SetupScreen from './SetupScreen';
 import FocusMode from './FocusMode';
 import LoginScreen from './LoginScreen';
+import AnalyticsDashboard from './AnalyticsDashboard';
+import { Activity } from 'lucide-react';
 
 function App() {
   const [isFocusMode, setIsFocusMode] = useState(false);
@@ -18,6 +20,13 @@ function App() {
     points: parseInt(localStorage.getItem('focusPoints') || '0', 10),
     streak: parseInt(localStorage.getItem('focusStreak') || '0', 10),
   });
+
+  const [sessionLogs, setSessionLogs] = useState(() => {
+    const saved = localStorage.getItem('focusSessionLogs');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('focusUser');
@@ -39,6 +48,10 @@ function App() {
     localStorage.setItem('focusStreak', stats.streak.toString());
   }, [stats]);
 
+  useEffect(() => {
+    localStorage.setItem('focusSessionLogs', JSON.stringify(sessionLogs));
+  }, [sessionLogs]);
+
   const handleStartFocus = (data) => {
     setSessionData({ ...sessionData, ...data });
     if (data.geminiKey) {
@@ -47,7 +60,7 @@ function App() {
     setIsFocusMode(true);
   };
 
-  const handleEndFocus = (success, pointsEarned) => {
+  const handleEndFocus = (success, pointsEarned, durationSeconds = 0) => {
     setIsFocusMode(false);
     
     const today = new Date().toLocaleDateString();
@@ -67,6 +80,15 @@ function App() {
           streak: newStreak,
         };
       });
+
+      // Log the session for Epic 1 Analytics
+      setSessionLogs((prev) => [...prev, {
+        date: new Date().toLocaleDateString(),
+        timestamp: Date.now(),
+        duration: durationSeconds,
+        xp: pointsEarned,
+        type: sessionData.materialType
+      }]);
     } else {
       setStats((prev) => ({
         ...prev,
@@ -95,11 +117,23 @@ function App() {
   return (
     <div className="app-wrapper">
       {/* Top Bar showing User Info */}
-      <div style={{ position: 'absolute', top: 20, right: 20, zIndex: 50, display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', color: 'var(--text-main)', fontSize: '0.8rem', backdropFilter: 'blur(10px)', border: '1px solid var(--border-color)' }}>
-        <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: currentUser.isGuest ? 'var(--text-muted)' : 'var(--accent-cyan)' }}></div>
-        {currentUser.name}
-        <button onClick={() => { localStorage.removeItem('focusUser'); setCurrentUser(null); }} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', marginLeft: '10px', fontSize: '0.7rem' }}>LOGOUT</button>
+      <div style={{ position: 'absolute', top: 20, right: 20, zIndex: 50, display: 'flex', alignItems: 'center', gap: '15px' }}>
+        {!isFocusMode && (
+          <button 
+            onClick={() => setShowAnalytics(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', color: 'var(--accent-cyan)', border: '1px solid var(--accent-cyan)', cursor: 'pointer', backdropFilter: 'blur(10px)' }}
+          >
+            <Activity size={14} /> Analytics
+          </button>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', color: 'var(--text-main)', fontSize: '0.8rem', backdropFilter: 'blur(10px)', border: '1px solid var(--border-color)' }}>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: currentUser.isGuest ? 'var(--text-muted)' : 'var(--accent-cyan)' }}></div>
+          {currentUser.name}
+          <button onClick={() => { localStorage.removeItem('focusUser'); setCurrentUser(null); }} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', marginLeft: '10px', fontSize: '0.7rem' }}>LOGOUT</button>
+        </div>
       </div>
+
+      {showAnalytics && <AnalyticsDashboard stats={stats} sessionLogs={sessionLogs} onClose={() => setShowAnalytics(false)} />}
 
       {/* Dynamic Background Orbs */}
       <div className="orb orb-1"></div>
@@ -118,6 +152,7 @@ function App() {
           onEnd={handleEndFocus} 
           globalPoints={stats.points}
           onSpendPoints={handleSpendPoints}
+          currentUser={currentUser}
         />
       )}
     </div>

@@ -13,8 +13,9 @@ import CodeEditor from './CodeEditor';
 import { getRankFromPoints } from './utils/levels';
 import { Lock, Unlock } from 'lucide-react';
 import WidgetPanel from './WidgetPanel';
+import MultiplayerWidget from './MultiplayerWidget';
 
-function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
+function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints, currentUser }) {
   const [isPlaying, setIsPlaying] = useState(true);
   const [focusSeconds, setFocusSeconds] = useState(0);
   const [isDead, setIsDead] = useState(false);
@@ -137,16 +138,26 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
     setIsPlaying(true);
   };
 
+  const handleEndSession = () => {
+    // Only grant points if they were not distracted
+    if (!isDead) {
+      const earnedPoints = Math.floor(focusSeconds / 60) * 10;
+      onEnd(true, earnedPoints, focusSeconds);
+    } else {
+      onEnd(false, 0, focusSeconds);
+    }
+  };
+
   const handleVideoEnd = () => {
-    onEnd(true, Math.floor(focusSeconds / 10));
+    onEnd(true, Math.floor(focusSeconds / 10), focusSeconds);
   };
 
   const forceQuit = () => {
-    onEnd(false, 0);
+    onEnd(false, 0, focusSeconds);
   };
 
   const safeExit = () => {
-    onEnd(true, 0);
+    onEnd(true, 0, focusSeconds);
   };
 
   const cancelUnlock = () => {
@@ -224,6 +235,17 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
       <WidgetPanel title="Quick Notes" defaultPosition={{ x: 20, y: 200 }} isLocked={isWidgetsLocked}>
         <Scratchpad />
       </WidgetPanel>
+
+      {sessionData.roomId && (
+        <WidgetPanel title="Multiplayer Sync" defaultPosition={{ x: 20, y: 600 }} isLocked={isWidgetsLocked}>
+          <MultiplayerWidget 
+            roomId={sessionData.roomId} 
+            currentUser={currentUser} 
+            isDead={isDead} 
+            focusSeconds={focusSeconds} 
+          />
+        </WidgetPanel>
+      )}
 
       {sessionData.spotifyEmbedUrl && (
         <WidgetPanel title="Spotify" defaultPosition={{ x: 300, y: 20 }} isLocked={isWidgetsLocked}>

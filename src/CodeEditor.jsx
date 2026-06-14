@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Terminal, Play, Bot, X, Loader, FileCode, Plus, Save, Cloud, Trash2 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { db, doc, setDoc, getDoc } from './firebase';
+import { getWebContainer, syncFilesToWebContainer } from './WebContainerManager';
+import XTermTerminal from './XTermTerminal';
 
 const STORAGE_KEY = 'focusIDE_files';
 const ACTIVE_KEY = 'focusIDE_activeFile';
@@ -44,6 +46,7 @@ export default function CodeEditor() {
   const [terminalHistory, setTerminalHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [renamingFileId, setRenamingFileId] = useState(null);
+  const [webcontainer, setWebcontainer] = useState(null);
   
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
@@ -51,6 +54,20 @@ export default function CodeEditor() {
   const activeFileIdRef = useRef(activeFileId);
   const filesRef = useRef(files);
   const outputRef = useRef(null);
+  const xtermRef = useRef(null);
+  
+  // Determine if we are in Electron
+  const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.toLowerCase().indexOf(' electron/') > -1;
+
+  useEffect(() => {
+    if (!isElectron && !webcontainer) {
+      getWebContainer().then(instance => {
+        setWebcontainer(instance);
+        // Sync initial files
+        syncFilesToWebContainer(filesRef.current).catch(console.error);
+      }).catch(console.error);
+    }
+  }, [isElectron, webcontainer]);
 
   // Keep refs in sync so Monaco closure always has the latest value
   useEffect(() => { activeFileIdRef.current = activeFileId; }, [activeFileId]);
@@ -396,7 +413,7 @@ sys.stderr = io.StringIO()
           setOutput(prev => prev + '[TS Runtime Error] ' + e.message + '\n');
         }
       } else if (activeFile.language === 'html') {
-        // HTML: open in a new tab preview
+      } else if (activeFile.language === 'html') {
         try {
           const blob = new Blob([activeFile.content], { type: 'text/html' });
           const url = URL.createObjectURL(blob);
@@ -406,7 +423,24 @@ sys.stderr = io.StringIO()
           setOutput(prev => prev + '[Error] ' + e.message + '\n');
         }
       } else {
-        setOutput(prev => prev + `[Info] Web execution for "${activeFile.language}" is not available.\nSupported in browser: JavaScript, Python, TypeScript, HTML.\nFor C++/Java/Rust, use the Desktop .exe app.\n`);
+        // Fallback or Native Node/Python execution via WebContainers
+        if (webcontainer && xtermRef.current) {
+          try {
+            await syncFilesToWebContainer(filesRef.current);
+            if (activeFile.language === 'javascript') {
+              xtermRef.current.runCommand(`node "${activeFile.name}"`);
+            } else if (activeFile.language === 'python') {
+              xtermRef.current.runCommand(`python3 "${activeFile.name}"`);
+            } else {
+              setOutput(prev => prev + `[Info] Running generic file in WebContainer.\n`);
+              xtermRef.current.runCommand(`cat "${activeFile.name}"`);
+            }
+          } catch (e) {
+            setOutput(prev => prev + '[WebContainer Error] ' + e.message + '\n');
+          }
+        } else {
+          setOutput(prev => prev + `[Info] WebContainer is booting or not available. Please wait a moment.\n`);
+        }
       }
       setIsRunning(false);
     }
@@ -716,23 +750,32 @@ sys.stderr = io.StringIO()
         {/* ═══ Terminal Output ═══ */}
         <div style={{ height: '180px', backgroundColor: '#1a1a1a', borderTop: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <div style={{ padding: '4px 12px', color: '#666', fontSize: '0.72rem', borderBottom: '1px solid #252526', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            <span><Terminal size={11} style={{ verticalAlign: 'middle', marginRight: '5px' }} />Terminal</span>
-            <button onClick={() => setOutput('')} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: '0.7rem' }}>Clear</button>
+            <span><Terminal size={11} style={{ verticalAlign: 'middle', marginRight: '5px' }} />Terminal {isElectron ? '(Local)' : '(WebContainer)'}</span>
+            {isElectron && <button onClick={() => setOutput('')} style={{ background: 'none', border: 'none', color: '#555', cursor: 'pointer', fontSize: '0.7rem' }}>Clear</button>}
           </div>
-          <div ref={outputRef} style={{ flex: 1, padding: '8px 12px', color: '#ccc', fontFamily: '"Cascadia Code", "Fira Code", monospace', overflowY: 'auto', fontSize: '0.8rem' }}>
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{output}</pre>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', padding: '4px 12px', borderTop: '1px solid #252526', backgroundColor: '#1e1e1e' }}>
-            <span style={{ color: 'var(--accent-cyan)', marginRight: '8px', fontFamily: 'monospace', fontSize: '0.82rem', userSelect: 'none' }}>$</span>
-            <input 
-              type="text" 
-              value={terminalInput}
-              onChange={(e) => setTerminalInput(e.target.value)}
-              onKeyDown={handleTerminalKeyDown}
-              placeholder="Type command (try 'help')..."
-              style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', fontFamily: '"Cascadia Code", "Fira Code", monospace', outline: 'none', fontSize: '0.82rem' }}
-            />
-          </div>
+          
+          {isElectron ? (
+            <>
+              <div ref={outputRef} style={{ flex: 1, padding: '8px 12px', color: '#ccc', fontFamily: '"Cascadia Code", "Fira Code", monospace', overflowY: 'auto', fontSize: '0.8rem' }}>
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{output}</pre>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '4px 12px', borderTop: '1px solid #252526', backgroundColor: '#1e1e1e' }}>
+                <span style={{ color: 'var(--accent-cyan)', marginRight: '8px', fontFamily: 'monospace', fontSize: '0.82rem', userSelect: 'none' }}>$</span>
+                <input 
+                  type="text" 
+                  value={terminalInput}
+                  onChange={(e) => setTerminalInput(e.target.value)}
+                  onKeyDown={handleTerminalKeyDown}
+                  placeholder="Type command..."
+                  style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', fontFamily: '"Cascadia Code", "Fira Code", monospace', outline: 'none', fontSize: '0.82rem' }}
+                />
+              </div>
+            </>
+          ) : (
+            <div style={{ flex: 1, padding: '4px' }}>
+              <XTermTerminal ref={xtermRef} webcontainer={webcontainer} />
+            </div>
+          )}
         </div>
       </div>
     </div>

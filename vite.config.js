@@ -7,5 +7,11 @@ export default defineConfig({
   base: './', // Important for Electron to load local files correctly
   build: {
     outDir: 'production'
+  },
+  server: {
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Opener-Policy': 'same-origin'
+    }
   }
 })

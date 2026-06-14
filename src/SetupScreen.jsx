@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Play, Flame, Award, FileText, Youtube } from 'lucide-react';
+import { Play, Flame, Award, FileText, Video } from 'lucide-react';
 
 function SetupScreen({ onStart, stats, initialGeminiKey }) {
   const [materialType, setMaterialType] = useState('youtube'); // 'youtube' or 'pdf'
@@ -74,7 +74,7 @@ function SetupScreen({ onStart, stats, initialGeminiKey }) {
               style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: '10px', background: materialType === 'youtube' ? '' : 'rgba(255,255,255,0.05)', color: materialType === 'youtube' ? '' : 'var(--text-muted)', border: '1px solid var(--glass-border)' }}
               onClick={() => setMaterialType('youtube')}
             >
-              <Youtube size={20}/> Video
+              <Video size={20}/> Video
             </button>
             <button 
               type="button"

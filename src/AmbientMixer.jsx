@@ -6,6 +6,15 @@ export default function AmbientMixer() {
   const audioCtxRef = useRef(null);
   const nodesRef = useRef({});
 
+  const sounds = [
+    { id: 'rain', label: 'Heavy Rain', url: 'https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c1539c.mp3?filename=heavy-rain-nature-sounds-8186.mp3' },
+    { id: 'cafe', label: 'Cafe Chatter', url: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_7d5a57dc2d.mp3?filename=cafe-background-noise-10706.mp3' },
+    { id: 'lofi', label: 'Lo-Fi Chill', url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=lofi-study-112191.mp3' },
+    { id: 'fire', label: 'Campfire', url: 'https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=crackling-fireplace-nature-sounds-8012.mp3' },
+    { id: 'binaural_alpha', label: 'Alpha Waves (Focus)', url: 'https://cdn.pixabay.com/download/audio/2022/02/07/audio_df3d0aebaf.mp3?filename=binaural-alpha-14-hz-16474.mp3' },
+    { id: 'binaural_theta', label: 'Theta Waves (Deep)', url: 'https://cdn.pixabay.com/download/audio/2022/02/07/audio_731e84d4b1.mp3?filename=binaural-theta-4-hz-16472.mp3' }
+  ];
+
   // Initialize Web Audio API on first interaction
   const initAudio = () => {
     if (!audioCtxRef.current) {

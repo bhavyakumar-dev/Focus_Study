@@ -12,6 +12,11 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
   const [isDead, setIsDead] = useState(false);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
+  
+  // Pomodoro States
+  const [pomodoroPhase, setPomodoroPhase] = useState('work'); // 'work' or 'break'
+  const [pomodoroTimeLeft, setPomodoroTimeLeft] = useState(25 * 60);
+
   const containerRef = useRef(null);
   
   // Enter full screen on mount
@@ -34,14 +39,31 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
     if (isPlaying && !isDead) {
       interval = setInterval(() => {
         setFocusSeconds((prev) => prev + 1);
+        
+        if (sessionData.isPomodoro) {
+          setPomodoroTimeLeft((prev) => {
+            if (prev <= 1) {
+              // Switch phase
+              const newPhase = pomodoroPhase === 'work' ? 'break' : 'work';
+              setPomodoroPhase(newPhase);
+              
+              // Play a sound? (Optional, maybe later)
+              return newPhase === 'work' ? 25 * 60 : 5 * 60;
+            }
+            return prev - 1;
+          });
+        }
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [isPlaying, isDead]);
+  }, [isPlaying, isDead, sessionData.isPomodoro, pomodoroPhase]);
 
   // Anti-cheat: Visibility change (switching tabs/windows)
   useEffect(() => {
     const handleVisibilityChange = () => {
+      // Ignore visibility cheat during Pomodoro Break!
+      if (sessionData.isPomodoro && pomodoroPhase === 'break') return;
+
       if (document.hidden) {
         handleFocusBroken();
       }
@@ -128,7 +150,22 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
     <div className="focus-container" ref={containerRef}>
       
       {/* Gamification Core */}
-      <FocusTracker focusSeconds={focusSeconds} isDead={isDead} />
+      <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 40, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <FocusTracker focusSeconds={focusSeconds} isDead={isDead} />
+        
+        {/* Pomodoro Display */}
+        {sessionData.isPomodoro && (
+          <div className="glass-panel" style={{ padding: '10px 15px', color: pomodoroPhase === 'work' ? 'var(--danger)' : 'var(--accent-cyan)' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase' }}>
+              {pomodoroPhase === 'work' ? 'FOCUS PHASE' : 'BREAK TIME (FREE ROAM)'}
+            </div>
+            <div style={{ fontSize: '1.5rem', fontFamily: 'monospace' }}>
+              {Math.floor(pomodoroTimeLeft / 60).toString().padStart(2, '0')}:
+              {(pomodoroTimeLeft % 60).toString().padStart(2, '0')}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Main Content Area */}
       <div className="video-section">

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Play, Flame, Award, FileText, Video, Music } from 'lucide-react';
+import { Play, Flame, Award, FileText, Video, Music, Star } from 'lucide-react';
+import { getRankFromPoints } from './utils/levels';
 
 function SetupScreen({ onStart, stats, initialGeminiKey }) {
   const [materialType, setMaterialType] = useState('youtube'); // 'youtube' or 'pdf'
@@ -8,6 +9,7 @@ function SetupScreen({ onStart, stats, initialGeminiKey }) {
   const [password, setPassword] = useState('');
   const [geminiKey, setGeminiKey] = useState(initialGeminiKey || '');
   const [spotifyUrl, setSpotifyUrl] = useState('');
+  const [isPomodoro, setIsPomodoro] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
@@ -61,27 +63,43 @@ function SetupScreen({ onStart, stats, initialGeminiKey }) {
       pdfUrl: finalPdfUrl,
       password, 
       geminiKey,
-      spotifyEmbedUrl: spotifyId ? `https://open.spotify.com/embed/${spotifyType}/${spotifyId}?utm_source=generator` : ''
+      spotifyEmbedUrl: spotifyId ? `https://open.spotify.com/embed/${spotifyType}/${spotifyId}?utm_source=generator` : '',
+      isPomodoro
     });
   };
+
+  const rankInfo = getRankFromPoints(stats.points);
 
   return (
     <div className="setup-container">
       <div className="setup-card glass-panel">
         <h1 className="setup-title">FOCUS CORE</h1>
         
-        <div className="stats-container">
-          <div className="stat-item">
-            <div className="stat-value" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-              <Flame size={24} color="var(--danger)" /> {stats.streak}
+        <div className="stats-container" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '15px' }}>
+            <div className="stat-item" style={{ flex: 1 }}>
+              <div className="stat-value" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                <Flame size={24} color="var(--danger)" /> {stats.streak}
+              </div>
+              <div className="stat-label">Day Streak</div>
             </div>
-            <div className="stat-label">Day Streak</div>
+            <div className="stat-item" style={{ flex: 1 }}>
+              <div className="stat-value" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px', color: rankInfo.color }}>
+                <Award size={24} color={rankInfo.color} /> Lvl {rankInfo.level}
+              </div>
+              <div className="stat-label">{rankInfo.title}</div>
+            </div>
           </div>
-          <div className="stat-item">
-            <div className="stat-value" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-              <Award size={24} color="var(--accent-purple)" /> {stats.points}
+          
+          {/* Rank Progress Bar */}
+          <div style={{ padding: '0 10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
+              <span>{stats.points} XP</span>
+              <span>{rankInfo.nextRankPoints ? `${rankInfo.nextRankPoints} XP` : 'MAX'}</span>
             </div>
-            <div className="stat-label">Total Points</div>
+            <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+              <div style={{ width: `${rankInfo.progressToNextRank}%`, height: '100%', background: rankInfo.color, transition: 'width 0.5s ease' }}></div>
+            </div>
           </div>
         </div>
 
@@ -162,6 +180,17 @@ function SetupScreen({ onStart, stats, initialGeminiKey }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
+            <input 
+              type="checkbox" 
+              id="pomodoro-toggle"
+              checked={isPomodoro}
+              onChange={(e) => setIsPomodoro(e.target.checked)}
+              style={{ width: '18px', height: '18px', accentColor: 'var(--accent-purple)' }}
+            />
+            <label htmlFor="pomodoro-toggle" className="stat-label" style={{ cursor: 'pointer' }}>Enable Pomodoro Mode (25m Focus / 5m Break)</label>
           </div>
 
           {error && <div className="error-text">{error}</div>}

@@ -32,11 +32,12 @@ export default function MultiplayerWidget({ roomId, roomPassword, currentUser, i
     };
   }, [roomId, roomPassword, currentUser]);
 
+  const xpMinutes = Math.floor(focusSeconds / 60);
   useEffect(() => {
     if (service) {
-      service.updateState({ isDead, xp: Math.floor(focusSeconds / 60) * 10 });
+      service.updateState({ isDead, xp: xpMinutes * 10 });
     }
-  }, [isDead, Math.floor(focusSeconds / 60), service]);
+  }, [isDead, xpMinutes, service]);
 
   useEffect(() => {
     // Check if I got slapped!

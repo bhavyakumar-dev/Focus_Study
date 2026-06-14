@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import VideoPlayer from './VideoPlayer';
+import PdfViewer from './PdfViewer';
 import GeminiAssistant from './GeminiAssistant';
 import FocusTracker from './FocusTracker';
 import UnlockModal from './UnlockModal';
@@ -42,9 +43,6 @@ function FocusMode({ sessionData, onEnd }) {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         handleFocusBroken();
-      } else if (showWarning) {
-        // Returned to tab, but needs to re-enter fullscreen or dismiss warning
-        // Let's keep it paused until they interact
       }
     };
 
@@ -97,10 +95,7 @@ function FocusMode({ sessionData, onEnd }) {
   };
 
   const safeExit = () => {
-    // Exited early but legally (with password), maybe give half points or 0 points but keep streak?
-    // Let's say safe exit gives 0 points but keeps streak
-    // The requirement says "exiting early will not reward points", but keeps streak.
-    // However, the App.jsx logic currently: handleEndFocus(success, points)
+    // Safe exit gives 0 points but keeps streak
     onEnd(true, 0);
   };
 
@@ -109,19 +104,30 @@ function FocusMode({ sessionData, onEnd }) {
     resumeFocus();
   };
 
+  // If it's a PDF, there's no natural "end" event like a video.
+  // The user will have to exit via the password to claim their points safely when they finish reading.
+  // For PDFs, we'll let them safe exit and award points based on time spent.
+  const pdfSafeExit = () => {
+    onEnd(true, Math.floor(focusSeconds / 10));
+  };
+
   return (
     <div className="focus-container" ref={containerRef}>
       
       {/* Gamification Core */}
       <FocusTracker focusSeconds={focusSeconds} isDead={isDead} />
 
-      {/* Main Video Area */}
+      {/* Main Content Area */}
       <div className="video-section">
-        <VideoPlayer 
-          videoUrl={sessionData.videoUrl} 
-          isPlaying={isPlaying} 
-          onEnd={handleVideoEnd}
-        />
+        {sessionData.materialType === 'youtube' ? (
+          <VideoPlayer 
+            videoUrl={sessionData.videoUrl} 
+            isPlaying={isPlaying} 
+            onEnd={handleVideoEnd}
+          />
+        ) : (
+          <PdfViewer pdfUrl={sessionData.pdfUrl} />
+        )}
       </div>
 
       {/* AI Assistant */}
@@ -146,7 +152,7 @@ function FocusMode({ sessionData, onEnd }) {
       {showUnlockModal && (
         <UnlockModal 
           requiredPassword={sessionData.password} 
-          onUnlock={safeExit} 
+          onUnlock={sessionData.materialType === 'pdf' ? pdfSafeExit : safeExit} 
           onCancel={cancelUnlock}
           forceQuit={forceQuit}
         />

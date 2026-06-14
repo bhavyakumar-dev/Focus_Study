@@ -9,6 +9,7 @@ import { initVimMode } from 'monaco-vim';
 import * as Y from 'yjs';
 import { WebrtcProvider } from 'y-webrtc';
 import { MonacoBinding } from 'y-monaco';
+import DocumentPreviewPane from './DocumentPreviewPane';
 
 const STORAGE_KEY = 'focusIDE_files';
 const ACTIVE_KEY = 'focusIDE_activeFile';
@@ -60,6 +61,7 @@ export default function CodeEditor() {
   const [vimModeEnabled, setVimModeEnabled] = useState(false);
   const [editorTheme, setEditorTheme] = useState('vs-dark');
   const [isSnippetsOpen, setIsSnippetsOpen] = useState(false);
+  const [isDocPreviewOpen, setIsDocPreviewOpen] = useState(false);
   const isGhostTextEnabledRef = useRef(isGhostTextEnabled);
   
   const editorRef = useRef(null);
@@ -695,14 +697,14 @@ sys.stderr = io.StringIO()
     setAiResponse('');
     try {
       const ai = new GoogleGenAI({ apiKey: geminiKey });
-      const prompt = `You are a strict, elite Pair Programming AI embedded in a Focus IDE.
-      The user is working in ${activeFile.language}.
-      Current Code:
-      \`\`\`${activeFile.language}
+      const prompt = `You are Jarvis, an elite, highly empathetic, and human-like AI programming companion embedded in Focus IDE. 
+      Speak in a friendly, conversational, and encouraging tone. Do not sound robotic. Be a true partner to the user.
+      The user's active file is: ${activeFile.name} (${activeFile.language}).
+      Here is the current code context:
+      \`\`\`
       ${activeFile.content}
       \`\`\`
-      User Request: ${aiPrompt}
-      Respond concisely with expert advice, refactors, or debugging steps.`;
+      The user asks: ${aiPrompt}`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -734,7 +736,8 @@ sys.stderr = io.StringIO()
     
     try {
       const ai = new GoogleGenAI({ apiKey: geminiKey });
-      const prompt = `You are an elite debugging AI embedded in Focus IDE.
+      const prompt = `You are Jarvis, an elite, highly empathetic, and human-like debugging AI embedded in Focus IDE.
+      Speak in a friendly, conversational, and encouraging tone. Be a true partner.
       The user just ran some code or commands and got this terminal output:
       \`\`\`
       ${termContent}
@@ -743,7 +746,7 @@ sys.stderr = io.StringIO()
       \`\`\`
       ${activeFile.content}
       \`\`\`
-      Identify any errors in the terminal output, explain what went wrong concisely, and provide a fix.`;
+      Identify any errors in the terminal output, explain what went wrong conversationally, and provide a fix.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -916,6 +919,14 @@ sys.stderr = io.StringIO()
               <option value="vs-light">Light</option>
               <option value="hc-black">High Contrast</option>
             </select>
+            {(activeFile.language === 'markdown' || activeFile.language === 'latex') && (
+              <button 
+                onClick={() => setIsDocPreviewOpen(!isDocPreviewOpen)}
+                style={{ display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: isDocPreviewOpen ? 'rgba(16, 185, 129, 0.1)' : 'transparent', color: isDocPreviewOpen ? '#10b981' : '#aaa', border: `1px solid ${isDocPreviewOpen ? '#10b981' : '#444'}`, padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s', boxShadow: isDocPreviewOpen ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none' }}
+              >
+                <FileCode size={13} /> Document Preview
+              </button>
+            )}
             <button 
               onClick={() => setVimModeEnabled(!vimModeEnabled)}
               style={{ display: 'flex', alignItems: 'center', gap: '5px', backgroundColor: vimModeEnabled ? 'rgba(16, 185, 129, 0.1)' : 'transparent', color: vimModeEnabled ? '#10b981' : '#aaa', border: `1px solid ${vimModeEnabled ? '#10b981' : '#444'}`, padding: '4px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s', boxShadow: vimModeEnabled ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none' }}
@@ -970,6 +981,13 @@ sys.stderr = io.StringIO()
                   editorRef.current.focus();
                 }
               }}
+            />
+          )}
+
+          {isDocPreviewOpen && (activeFile.language === 'markdown' || activeFile.language === 'latex') && (
+            <DocumentPreviewPane 
+              activeFile={activeFile} 
+              onClose={() => setIsDocPreviewOpen(false)} 
             />
           )}
 

@@ -5,7 +5,7 @@ import { db, doc, setDoc, getDoc } from './firebase';
 
 export default function CodeEditor() {
   const [files, setFiles] = useState([
-    { id: 1, name: 'main.js', language: 'javascript', content: '// Welcome to Focus IDE V2\n\nconsole.log("System Optimal");\n' }
+    { id: 1, name: 'main.js', language: 'javascript', content: '// Welcome to Focus IDE V3\n\nconsole.log("System Optimal");\n' }
   ]);
   const [activeFileId, setActiveFileId] = useState(1);
   const [output, setOutput] = useState('');
@@ -16,6 +16,8 @@ export default function CodeEditor() {
   const [aiResponse, setAiResponse] = useState('');
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  
+  const [terminalInput, setTerminalInput] = useState('');
   
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
@@ -44,6 +46,9 @@ export default function CodeEditor() {
             automaticLayout: true,
             minimap: { enabled: true },
             bracketPairColorization: { enabled: true },
+            suggestOnTriggerCharacters: true,
+            wordBasedSuggestions: true,
+            quickSuggestions: true,
             fontSize: 14,
             fontFamily: '"Fira Code", monospace',
             padding: { top: 20 }
@@ -65,7 +70,6 @@ export default function CodeEditor() {
     };
   }, []); // Run once
 
-  // When active file changes, update monaco content and language without re-triggering onChange loops
   useEffect(() => {
     if (editorRef.current && monacoRef.current) {
       const model = editorRef.current.getModel();
@@ -158,9 +162,9 @@ export default function CodeEditor() {
            command = `rustc "${filePath}" -o "${outPath}" && "${outPath}"`;
         }
 
-        exec(command, async (error, stdout, stderr) => {
+        exec(command, { cwd: tmpDir }, async (error, stdout, stderr) => {
           if (error) {
-             setOutput('Error:\n' + (stderr || error.message));
+             setOutput('Execution Error:\n' + (stderr || error.message) + '\n\nMake sure ' + config[activeFile.language].cmd + ' is installed and added to your system PATH.');
           } else {
              setOutput(stdout || 'Executed successfully with no output.');
           }
@@ -172,48 +176,36 @@ export default function CodeEditor() {
          setIsRunning(false);
          return;
       }
+    } else {
+        // Web Execution via Piston is disabled due to whitelist
+        setOutput('Code execution on the Web has been disabled because the Public Piston API is now whitelist-only.\n\nPlease download and use the native Windows .exe app to execute code and use the terminal natively via child_process.');
+        setIsRunning(false);
+    }
+  };
+
+  const executeTerminalCommand = () => {
+    if (!terminalInput.trim()) return;
+    
+    const isElectron = typeof window !== 'undefined' && window.nodeRequire;
+    if (!isElectron) {
+      setOutput(prev => prev + `\n$ ${terminalInput}\n[System Error] Terminal package installation (like pip/npm) is only supported natively on the Windows .exe Desktop app.\n`);
+      setTerminalInput('');
+      return;
     }
 
-    // Web Mode using Piston API
     try {
-      const aliases = {
-        javascript: 'javascript',
-        python: 'python',
-        java: 'java',
-        cpp: 'cpp',
-        rust: 'rust'
-      };
-      const versions = {
-        javascript: '18.15.0',
-        python: '3.10.0',
-        java: '15.0.2',
-        cpp: '10.2.0',
-        rust: '1.68.2'
-      };
-
-      const lang = aliases[activeFile.language];
-      if (!lang) throw new Error("Language not supported for Web Execution.");
-
-      const res = await fetch('https://emkc.org/api/v2/piston/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          language: lang,
-          version: versions[lang],
-          files: [{ content: activeFile.content }]
-        })
+      const { exec } = window.nodeRequire('child_process');
+      const os = window.nodeRequire('os');
+      const tmpDir = os.tmpdir();
+      
+      setOutput(prev => prev + `\n$ ${terminalInput}\nExecuting...`);
+      
+      exec(terminalInput, { cwd: tmpDir }, (error, stdout, stderr) => {
+        setOutput(prev => prev + '\n' + (error ? (stderr || error.message) : stdout));
       });
-
-      const data = await res.json();
-      if (data.run && data.run.output) {
-        setOutput(data.run.output);
-      } else {
-        setOutput(data.message || 'Execution failed.');
-      }
-    } catch (err) {
-      setOutput('Web Execution Error: ' + err.message);
-    } finally {
-      setIsRunning(false);
+      setTerminalInput('');
+    } catch (e) {
+      setOutput(prev => prev + `\n[System Error] ${e.message}`);
     }
   };
 
@@ -364,9 +356,24 @@ export default function CodeEditor() {
         </div>
 
         {/* Terminal Output */}
-        <div style={{ height: '150px', backgroundColor: '#1e1e1e', borderTop: '1px solid #444', padding: '10px', color: '#ccc', fontFamily: 'monospace', overflowY: 'auto' }}>
-          <div style={{ color: '#888', marginBottom: '5px', fontSize: '0.8rem' }}>TERMINAL OUTPUT</div>
-          <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{output}</pre>
+        <div style={{ height: '200px', backgroundColor: '#1e1e1e', borderTop: '1px solid #444', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '5px 10px', color: '#888', fontSize: '0.8rem', borderBottom: '1px solid #333' }}>
+            TERMINAL OUTPUT (Interactive)
+          </div>
+          <div style={{ flex: 1, padding: '10px', color: '#ccc', fontFamily: 'monospace', overflowY: 'auto' }}>
+            <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{output}</pre>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '5px 10px', borderTop: '1px solid #333' }}>
+            <span style={{ color: 'var(--accent-cyan)', marginRight: '10px', fontFamily: 'monospace' }}>$</span>
+            <input 
+              type="text" 
+              value={terminalInput}
+              onChange={(e) => setTerminalInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && executeTerminalCommand()}
+              placeholder="Type terminal command here (e.g. npm install axios) and press Enter..."
+              style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', fontFamily: 'monospace', outline: 'none' }}
+            />
+          </div>
         </div>
       </div>
     </div>

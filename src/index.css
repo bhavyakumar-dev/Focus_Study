@@ -547,7 +547,7 @@ body {
   background: radial-gradient(circle at 30% 30%, #fff, var(--accent-cyan));
   box-shadow: 0 0 20px var(--accent-cyan);
   transition: all 1s ease;
-  animation: pulse 4s infinite alternate;
+  animation: pulse-heartbeat 1.5s infinite;
 }
 
 .focus-core.stage-0 { filter: hue-rotate(0deg) brightness(0.5); box-shadow: 0 0 5px var(--text-muted); }
@@ -556,9 +556,13 @@ body {
 .focus-core.stage-3 { filter: hue-rotate(60deg) brightness(1.2); box-shadow: 0 0 30px var(--accent-purple); }
 .focus-core.dead { background: #333; box-shadow: 0 0 5px #f00; animation: none; }
 
-@keyframes pulse {
+@keyframes pulse-heartbeat {
   0% { transform: scale(1); }
-  100% { transform: scale(1.1); }
+  15% { transform: scale(1.15); }
+  30% { transform: scale(1); }
+  45% { transform: scale(1.25); }
+  60% { transform: scale(1); }
+  100% { transform: scale(1); }
 }
 
 .core-stats {

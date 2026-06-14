@@ -61,11 +61,16 @@ export default function SetupScreen({ onStart, stats, initialGeminiKey }) {
     setError('');
 
     let finalPdfUrl = pdfUrl;
+    let finalVideoUrl = videoUrl;
+
     if (materialType === 'youtube') {
       if (!videoUrl) return setError('Please enter a YouTube URL');
       try { new URL(videoUrl); } catch { return setError('Invalid YouTube URL'); }
     } else if (materialType === 'pdf') {
       if (!pdfUrl) return setError('Please enter a PDF URL or upload one');
+      finalVideoUrl = ''; // Clear video
+    } else if (materialType === 'code') {
+      finalVideoUrl = ''; // Clear video
     }
     // No URL validation needed for 'code'
 
@@ -83,7 +88,7 @@ export default function SetupScreen({ onStart, stats, initialGeminiKey }) {
 
     onStart({ 
       materialType,
-      videoUrl: materialType === 'youtube' ? videoUrl : '', 
+      videoUrl: finalVideoUrl, 
       pdfUrl: finalPdfUrl,
       password, 
       geminiKey,

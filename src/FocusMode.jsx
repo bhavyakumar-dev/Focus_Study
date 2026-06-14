@@ -14,6 +14,7 @@ import { getRankFromPoints } from './utils/levels';
 import { Lock, Unlock } from 'lucide-react';
 import WidgetPanel from './WidgetPanel';
 import MultiplayerWidget from './MultiplayerWidget';
+import HealthProtocols from './HealthProtocols';
 
 function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints, currentUser }) {
   const [isPlaying, setIsPlaying] = useState(true);
@@ -171,6 +172,7 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints, currentUse
 
   return (
     <div className="focus-container" ref={containerRef}>
+      <HealthProtocols isPlaying={isPlaying} isDead={isDead} />
       
       {/* Lock Widgets Toggle */}
       <button 

@@ -16,12 +16,16 @@ const firebaseConfig = {
 let app, auth, googleProvider, db;
 
 try {
-  app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  googleProvider = new GoogleAuthProvider();
-  db = getFirestore(app);
+  if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY_HERE") {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    googleProvider = new GoogleAuthProvider();
+    db = getFirestore(app);
+  } else {
+    console.warn("Firebase not configured. Please add your credentials to src/firebase.js.");
+  }
 } catch (error) {
-  console.error("Firebase initialization failed. Please update firebaseConfig.", error);
+  console.error("Firebase initialization failed.", error);
 }
 
 export { 

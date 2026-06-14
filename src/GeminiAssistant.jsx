@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from '@google/genai';
-import { Send } from 'lucide-react';
+import { Send, MessageSquare } from 'lucide-react';
 
 function GeminiAssistant({ apiKey }) {
   const [messages, setMessages] = useState([
@@ -61,13 +61,33 @@ function GeminiAssistant({ apiKey }) {
   };
 
 
-  const handleSummarize = () => {
+  const handleSummarize = async () => {
     if (!apiKey || isLoading) return;
     const prompt = "Please provide a concise, high-yield summary of the key concepts I should be focusing on for my current study topic. Format it with bullet points.";
     
-    const newMessage = { role: 'user', content: "Summarize the key concepts." };
+    const newMessage = { role: 'user', content: prompt };
     setMessages(prev => [...prev, newMessage]);
-    callGeminiAPI(prompt, [...messages, newMessage]);
+    setIsLoading(true);
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: prompt }]
+          }
+        ]
+      });
+
+      const aiMsg = response.text || "Error processing request.";
+      setMessages(prev => [...prev, { role: 'ai', content: aiMsg }]);
+    } catch (error) {
+      console.error(error);
+      setMessages(prev => [...prev, { role: 'ai', content: 'Connection to Focus AI failed. Please check your API key.' }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

@@ -101,9 +101,12 @@ body {
 }
 
 .setup-card {
-  width: 100%;
-  max-width: 480px;
-  padding: 40px;
+  width: 90%;
+  max-width: 400px;
+  padding: 30px;
+  border-radius: 16px;
+  max-height: 90vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 20px;

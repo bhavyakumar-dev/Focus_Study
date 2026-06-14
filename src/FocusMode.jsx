@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { ChevronRight, ChevronLeft } from 'lucide-react';
 import VideoPlayer from './VideoPlayer';
 import PdfViewer from './PdfViewer';
 import GeminiAssistant from './GeminiAssistant';
@@ -7,6 +8,8 @@ import UnlockModal from './UnlockModal';
 import SpotifyPlayer from './SpotifyPlayer';
 import AmbientMixer from './AmbientMixer';
 import TaskManager from './TaskManager';
+import Scratchpad from './Scratchpad';
+import { getRankFromPoints } from './utils/levels';
 
 function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
   const [isPlaying, setIsPlaying] = useState(true);
@@ -18,6 +21,9 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
   // Pomodoro States
   const [pomodoroPhase, setPomodoroPhase] = useState('work'); // 'work' or 'break'
   const [pomodoroTimeLeft, setPomodoroTimeLeft] = useState(25 * 60);
+
+  // Sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const containerRef = useRef(null);
   
@@ -171,6 +177,15 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
 
       {/* Main Content Area */}
       <div className="video-section">
+        {/* Collapsible Sidebar Toggle */}
+        <button 
+          className="sidebar-toggle-btn"
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          style={{ right: isSidebarOpen ? '370px' : '20px' }}
+        >
+          {isSidebarOpen ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+        </button>
+
         {sessionData.materialType === 'youtube' ? (
           <VideoPlayer 
             videoUrl={sessionData.videoUrl} 
@@ -184,7 +199,7 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
 
       {/* Sidebar Area: AI & Spotify */}
       {(sessionData.geminiKey || sessionData.spotifyEmbedUrl) && (
-        <div className="sidebar-container">
+        <div className={`sidebar-section ${!isSidebarOpen ? 'sidebar-collapsed' : ''}`}>
           {sessionData.geminiKey && (
             <GeminiAssistant apiKey={sessionData.geminiKey} />
           )}
@@ -194,6 +209,9 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints }) {
 
           {/* Task Manager */}
           <TaskManager />
+
+          {/* Quick Notes */}
+          <Scratchpad />
 
           {sessionData.spotifyEmbedUrl && (
             <SpotifyPlayer 

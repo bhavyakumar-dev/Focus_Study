@@ -70,10 +70,25 @@ function SetupScreen({ onStart, stats, initialGeminiKey }) {
 
   const rankInfo = getRankFromPoints(stats.points);
 
+  const QUOTES = [
+    "“You have power over your mind - not outside events. Realize this, and you will find strength.” – Marcus Aurelius",
+    "“We suffer more often in imagination than in reality.” – Seneca",
+    "“Focus is a matter of deciding what things you're not going to do.” – John Carmack",
+    "“The successful warrior is the average man, with laser-like focus.” – Bruce Lee",
+    "“Concentrate all your thoughts upon the work at hand. The sun's rays do not burn until brought to a focus.” – Alexander Graham Bell"
+  ];
+  
+  // Pick a random quote on mount, but keep it stable during render
+  const [quote] = useState(() => QUOTES[Math.floor(Math.random() * QUOTES.length)]);
+
   return (
     <div className="setup-container">
       <div className="setup-card glass-panel">
         <h1 className="setup-title">FOCUS CORE</h1>
+        
+        <div style={{ textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)', fontStyle: 'italic', marginBottom: '10px', padding: '0 20px' }}>
+          {quote}
+        </div>
         
         <div className="stats-container" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '15px' }}>

@@ -60,7 +60,12 @@ function App() {
   };
 
   return (
-    <>
+    <div className="app-container">
+      {/* Dynamic Background Orbs */}
+      <div className="orb orb-1"></div>
+      <div className="orb orb-2"></div>
+      <div className="orb orb-3"></div>
+
       {!isFocusMode ? (
         <SetupScreen 
           onStart={handleStartFocus} 
@@ -75,7 +80,7 @@ function App() {
           onSpendPoints={handleSpendPoints}
         />
       )}
-    </>
+    </div>
   );
 }
 

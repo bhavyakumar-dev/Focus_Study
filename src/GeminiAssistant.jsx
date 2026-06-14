@@ -60,11 +60,39 @@ function GeminiAssistant({ apiKey }) {
     }
   };
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!input.trim() || isLoading) return;
+
+    const userMsg = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    callGeminiAPI(userMsg, messages);
+  };
+
+  const handleSummarize = () => {
+    if (!apiKey || isLoading) return;
+    const prompt = "Please provide a concise, high-yield summary of the key concepts I should be focusing on for my current study topic. Format it with bullet points.";
+    
+    const newMessage = { role: 'user', content: "Summarize the key concepts." };
+    setMessages(prev => [...prev, newMessage]);
+    callGeminiAPI(prompt, [...messages, newMessage]);
+  };
+
   return (
-    <div className="ai-sidebar">
-      <div style={{ padding: '20px', borderBottom: '1px solid var(--glass-border)' }}>
-        <h3 style={{ color: 'var(--accent-purple)', margin: 0, fontWeight: 700 }}>STUDY ASSISTANT</h3>
-        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Strict Mode Enabled</span>
+    <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '350px' }}>
+      <div style={{ padding: '15px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <MessageSquare size={18} color="var(--accent-purple)" />
+          Study Assistant
+        </h3>
+        <button 
+          onClick={handleSummarize}
+          style={{ background: 'var(--accent-purple)', border: 'none', borderRadius: '4px', padding: '4px 8px', color: 'white', fontSize: '0.7rem', cursor: 'pointer' }}
+          disabled={isLoading}
+        >
+          Quick Summary
+        </button>
       </div>
       
       <div className="chat-messages">

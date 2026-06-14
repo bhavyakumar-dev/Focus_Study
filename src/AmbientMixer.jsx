@@ -1,53 +1,118 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CloudRain, Flame, Trees, Coffee } from 'lucide-react';
-
-const SOUNDS = [
-  { id: 'rain', name: 'Rain', icon: CloudRain, file: '/sounds/rain.mp3' },
-  { id: 'fire', name: 'Fireplace', icon: Flame, file: '/sounds/fire.mp3' },
-  { id: 'forest', name: 'Forest', icon: Trees, file: '/sounds/forest.mp3' },
-  { id: 'cafe', name: 'Cafe', icon: Coffee, file: '/sounds/cafe.mp3' }
-];
+import { Waves, Wind, Activity } from 'lucide-react';
 
 export default function AmbientMixer() {
-  const [volumes, setVolumes] = useState({ rain: 0, fire: 0, forest: 0, cafe: 0 });
-  const audioRefs = useRef({});
+  const [volumes, setVolumes] = useState({ brown: 0, pink: 0, white: 0 });
+  const audioCtxRef = useRef(null);
+  const nodesRef = useRef({});
 
-  const handleVolumeChange = (id, vol) => {
-    setVolumes(prev => ({ ...prev, [id]: vol }));
-    if (audioRefs.current[id]) {
-      audioRefs.current[id].volume = vol / 100;
-      if (vol > 0 && audioRefs.current[id].paused) {
-        audioRefs.current[id].play().catch(e => console.log("Audio play blocked", e));
-      } else if (vol === 0) {
-        audioRefs.current[id].pause();
-      }
+  // Initialize Web Audio API on first interaction
+  const initAudio = () => {
+    if (!audioCtxRef.current) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioContext();
+      audioCtxRef.current = ctx;
+
+      // Function to create noise buffers
+      const createNoise = (type) => {
+        const bufferSize = ctx.sampleRate * 2; // 2 seconds
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const output = buffer.getChannelData(0);
+
+        let lastOut = 0;
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          if (type === 'white') {
+            output[i] = white;
+          } else if (type === 'pink') {
+            // Very simple pink noise approximation
+            lastOut = (lastOut * 0.99) + (white * 0.05);
+            output[i] = lastOut;
+          } else if (type === 'brown') {
+            // Brown noise (integration of white noise)
+            lastOut = (lastOut + (white * 0.02)) / 1.02;
+            output[i] = lastOut * 3.5;
+          }
+        }
+        return buffer;
+      };
+
+      const setupNode = (type) => {
+        const source = ctx.createBufferSource();
+        source.buffer = createNoise(type);
+        source.loop = true;
+        
+        const gainNode = ctx.createGain();
+        gainNode.gain.value = 0; // start muted
+        
+        source.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        source.start();
+        
+        return gainNode;
+      };
+
+      nodesRef.current = {
+        brown: setupNode('brown'),
+        pink: setupNode('pink'),
+        white: setupNode('white')
+      };
+    }
+    
+    if (audioCtxRef.current.state === 'suspended') {
+      audioCtxRef.current.resume();
     }
   };
 
+  const handleVolumeChange = (id, vol) => {
+    setVolumes(prev => ({ ...prev, [id]: vol }));
+    
+    // Lazy initialize on first slider movement
+    if (!audioCtxRef.current) {
+      initAudio();
+    }
+    
+    if (nodesRef.current[id]) {
+      // Exponential curve for smoother volume perception
+      const gain = (vol / 100) * (vol / 100);
+      nodesRef.current[id].gain.setTargetAtTime(gain, audioCtxRef.current.currentTime, 0.1);
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close();
+      }
+    };
+  }, []);
+
   return (
     <div className="glass-panel" style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-      <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--accent-purple)', textAlign: 'center' }}>Ambient Mixer</h3>
+      <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--accent-purple)', textAlign: 'center' }}>Neural Acoustic Mixer</h3>
+      <div style={{ fontSize: '0.75rem', textAlign: 'center', color: 'var(--text-muted)', marginTop: '-10px' }}>
+        Synthesized focus frequencies
+      </div>
       
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {SOUNDS.map((sound) => (
-          <div key={sound.id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <sound.icon size={18} color={volumes[sound.id] > 0 ? "var(--accent-cyan)" : "var(--text-muted)"} />
-            <input 
-              type="range" 
-              min="0" 
-              max="100" 
-              value={volumes[sound.id]} 
-              onChange={(e) => handleVolumeChange(sound.id, parseInt(e.target.value))}
-              style={{ flex: 1, accentColor: 'var(--accent-cyan)' }}
-            />
-            {/* Hidden audio elements, looping */}
-            <audio 
-              ref={el => audioRefs.current[sound.id] = el} 
-              src={sound.file} 
-              loop 
-            />
-          </div>
-        ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Waves size={18} color={volumes.brown > 0 ? "var(--accent-cyan)" : "var(--text-muted)"} />
+          <div style={{ width: '80px', fontSize: '0.8rem' }}>Deep Brown</div>
+          <input type="range" min="0" max="100" value={volumes.brown} onChange={(e) => handleVolumeChange('brown', parseInt(e.target.value))} style={{ flex: 1, accentColor: 'var(--accent-cyan)' }} />
+        </div>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Wind size={18} color={volumes.pink > 0 ? "var(--accent-purple)" : "var(--text-muted)"} />
+          <div style={{ width: '80px', fontSize: '0.8rem' }}>Pink Noise</div>
+          <input type="range" min="0" max="100" value={volumes.pink} onChange={(e) => handleVolumeChange('pink', parseInt(e.target.value))} style={{ flex: 1, accentColor: 'var(--accent-purple)' }} />
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Activity size={18} color={volumes.white > 0 ? "var(--text-main)" : "var(--text-muted)"} />
+          <div style={{ width: '80px', fontSize: '0.8rem' }}>White Noise</div>
+          <input type="range" min="0" max="100" value={volumes.white} onChange={(e) => handleVolumeChange('white', parseInt(e.target.value))} style={{ flex: 1, accentColor: 'white' }} />
+        </div>
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ import { Lock, Unlock } from 'lucide-react';
 import WidgetPanel from './WidgetPanel';
 import MultiplayerWidget from './MultiplayerWidget';
 import HealthProtocols from './HealthProtocols';
+import FocusPet from './FocusPet';
 
 function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints, currentUser }) {
   const [isPlaying, setIsPlaying] = useState(true);
@@ -236,6 +237,10 @@ function FocusMode({ sessionData, onEnd, globalPoints, onSpendPoints, currentUse
 
       <WidgetPanel title="Quick Notes" defaultPosition={{ x: 20, y: 200 }} isLocked={isWidgetsLocked}>
         <Scratchpad />
+      </WidgetPanel>
+
+      <WidgetPanel title="Focus Pet" defaultPosition={{ x: 20, y: 400 }} isLocked={isWidgetsLocked}>
+        <FocusPet isDead={isDead} isPlaying={isPlaying} />
       </WidgetPanel>
 
       {sessionData.roomId && (

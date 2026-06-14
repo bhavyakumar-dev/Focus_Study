@@ -8,6 +8,7 @@ function GeminiAssistant({ apiKey }) {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isJarvisMode, setIsJarvisMode] = useState(false);
   const messagesEndRef = useRef(null);
   
   // Initialize AI client
@@ -20,6 +21,22 @@ function GeminiAssistant({ apiKey }) {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const speakText = (text) => {
+    if (!isJarvisMode || !('speechSynthesis' in window)) return;
+    
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Try to find a good English voice
+    const voices = window.speechSynthesis.getVoices();
+    const preferredVoice = voices.find(v => v.name.includes('Google UK English Male') || v.name.includes('Daniel') || v.name.includes('Samantha') || v.lang === 'en-US' || v.lang === 'en-GB');
+    if (preferredVoice) utterance.voice = preferredVoice;
+    
+    utterance.rate = 1.05;
+    utterance.pitch = 0.9;
+    window.speechSynthesis.speak(utterance);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -52,6 +69,7 @@ function GeminiAssistant({ apiKey }) {
 
       const aiMsg = response.text || "Error processing request.";
       setMessages(prev => [...prev, { role: 'ai', content: aiMsg }]);
+      speakText(aiMsg);
     } catch (error) {
       console.error(error);
       setMessages(prev => [...prev, { role: 'ai', content: 'Connection to Focus AI failed. Please check your API key.' }]);
@@ -82,6 +100,7 @@ function GeminiAssistant({ apiKey }) {
 
       const aiMsg = response.text || "Error processing request.";
       setMessages(prev => [...prev, { role: 'ai', content: aiMsg }]);
+      speakText(aiMsg);
     } catch (error) {
       console.error(error);
       setMessages(prev => [...prev, { role: 'ai', content: 'Connection to Focus AI failed. Please check your API key.' }]);
@@ -97,13 +116,26 @@ function GeminiAssistant({ apiKey }) {
           <MessageSquare size={18} color="var(--accent-purple)" />
           Study Assistant
         </h3>
-        <button 
-          onClick={handleSummarize}
-          style={{ background: 'var(--accent-purple)', border: 'none', borderRadius: '4px', padding: '4px 8px', color: 'white', fontSize: '0.7rem', cursor: 'pointer' }}
-          disabled={isLoading}
-        >
-          Quick Summary
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <label style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', color: isJarvisMode ? 'var(--accent-cyan)' : 'var(--text-muted)' }}>
+            <input 
+              type="checkbox" 
+              checked={isJarvisMode} 
+              onChange={(e) => {
+                setIsJarvisMode(e.target.checked);
+                if (!e.target.checked) window.speechSynthesis?.cancel();
+              }} 
+            />
+            Jarvis Voice
+          </label>
+          <button 
+            onClick={handleSummarize}
+            style={{ background: 'var(--accent-purple)', border: 'none', borderRadius: '4px', padding: '4px 8px', color: 'white', fontSize: '0.7rem', cursor: 'pointer' }}
+            disabled={isLoading}
+          >
+            Summary
+          </button>
+        </div>
       </div>
       
       <div className="chat-messages">

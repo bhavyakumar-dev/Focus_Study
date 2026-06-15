@@ -64,6 +64,11 @@ export default function CodeEditor() {
   const [isDocPreviewOpen, setIsDocPreviewOpen] = useState(false);
   const isGhostTextEnabledRef = useRef(isGhostTextEnabled);
   
+  // Command Palette
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
+  const commandInputRef = useRef(null);
+  
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const containerRef = useRef(null);
@@ -124,6 +129,35 @@ export default function CodeEditor() {
       outputRef.current.scrollTop = outputRef.current.scrollHeight;
     }
   }, [output]);
+
+  // ─── Command Palette Listeners ───
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 'p')) {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      }
+      if (e.key === 'Escape') {
+        setIsCommandPaletteOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (isCommandPaletteOpen && commandInputRef.current) {
+      commandInputRef.current.focus();
+      setCommandQuery('');
+    }
+  }, [isCommandPaletteOpen]);
+
+  const commandOptions = [
+    ...files.map(f => ({ type: 'file', label: `Open ${f.name}`, id: f.id, icon: <FileCode size={14}/> })),
+    { type: 'action', label: 'Toggle Vim Mode', action: () => setVimModeEnabled(!vimModeEnabled), icon: <Code2 size={14}/> },
+    { type: 'action', label: 'Toggle Light/Dark Theme', action: () => setEditorTheme(prev => prev === 'vs-dark' ? 'vs-light' : 'vs-dark'), icon: <Palette size={14}/> },
+    { type: 'action', label: 'Toggle AI Ghost Text', action: () => setIsGhostTextEnabled(!isGhostTextEnabled), icon: <Bot size={14}/> }
+  ].filter(c => c.label.toLowerCase().includes(commandQuery.toLowerCase()));
 
   useEffect(() => {
     if (monacoRef.current) {
@@ -1068,6 +1102,50 @@ sys.stderr = io.StringIO()
           )}
         </div>
       </div>
+
+      {/* ═══ Command Palette Overlay ═══ */}
+      {isCommandPaletteOpen && (
+        <div className="command-palette-overlay" onClick={() => setIsCommandPaletteOpen(false)}>
+          <div className="command-palette-container" onClick={e => e.stopPropagation()}>
+            <input 
+              ref={commandInputRef}
+              type="text" 
+              className="command-palette-input"
+              placeholder="Search files or run commands (e.g., 'Toggle Theme')..." 
+              value={commandQuery}
+              onChange={(e) => setCommandQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && commandOptions.length > 0) {
+                  const selected = commandOptions[0];
+                  if (selected.type === 'file') setActiveFileId(selected.id);
+                  if (selected.type === 'action') selected.action();
+                  setIsCommandPaletteOpen(false);
+                }
+              }}
+            />
+            <div className="command-palette-list">
+              {commandOptions.map((cmd, idx) => (
+                <div 
+                  key={idx} 
+                  className="command-item"
+                  onClick={() => {
+                    if (cmd.type === 'file') setActiveFileId(cmd.id);
+                    if (cmd.type === 'action') cmd.action();
+                    setIsCommandPaletteOpen(false);
+                  }}
+                >
+                  <div className="command-item-icon">{cmd.icon}</div>
+                  <span style={{ fontSize: '0.95rem' }}>{cmd.label}</span>
+                </div>
+              ))}
+              {commandOptions.length === 0 && (
+                <div style={{ padding: '15px 24px', color: '#666', fontStyle: 'italic', fontSize: '0.9rem' }}>No results found.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

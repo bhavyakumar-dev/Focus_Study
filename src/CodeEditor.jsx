@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Terminal, Play, Bot, X, Loader, FileCode, Plus, Save, Cloud, Trash2, Users, Globe, Settings, Palette, Code2, Image as ImageIcon, FileJson, FileText, Search } from 'lucide-react';
+import { Terminal, Play, Bot, X, Loader, FileCode, Plus, Save, Cloud, Trash2, Users, Globe, Settings, Palette, Code2, Image as ImageIcon, FileJson, FileText, Search, Beaker, ListTree } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { db, doc, setDoc, getDoc } from './firebase';
 import { getWebContainer, syncFilesToWebContainer, onServerReady } from './WebContainerManager';
@@ -15,8 +15,10 @@ import PackageManager from './PackageManager';
 import EnvVariablesManager from './EnvVariablesManager';
 import GitPanel from './GitPanel';
 import GlobalSearch from './GlobalSearch';
-import PortForwarding from './PortForwarding';
 import SettingsPanel from './SettingsPanel';
+import PortForwarding from './PortForwarding';
+import TestRunner from './TestRunner';
+import OutlineView from './OutlineView';
 import { formatCode } from './utils/formatter';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -878,6 +880,18 @@ sys.stderr = io.StringIO()
     }
   };
 
+  const downloadZip = async () => {
+    const zip = new JSZip();
+    files.forEach(f => zip.file(f.name, f.content));
+    const content = await zip.generateAsync({ type: 'blob' });
+    saveAs(content, 'workspace.zip');
+  };
+
+  const deleteFile = (id) => {
+    setFiles(prev => prev.filter(f => f.id !== id));
+    if (activeFileId === id) setActiveFileId(files[0]?.id || 1);
+  };
+
   return (
     <div style={{
       width: '100%', height: '100%', backgroundColor: '#1e1e1e',
@@ -888,8 +902,10 @@ sys.stderr = io.StringIO()
         <div style={{ width: '48px', backgroundColor: '#1e1e1e', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '10px', flexShrink: 0, gap: '15px' }}>
           <button onClick={() => setSidebarTab('explorer')} title="Explorer" style={{ background: 'none', border: 'none', color: sidebarTab === 'explorer' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><FileCode size={24} /></button>
           <button onClick={() => setSidebarTab('search')} title="Search" style={{ background: 'none', border: 'none', color: sidebarTab === 'search' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Search size={24} /></button>
+          <button onClick={() => setSidebarTab('outline')} title="Outline" style={{ background: 'none', border: 'none', color: sidebarTab === 'outline' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><ListTree size={24} /></button>
           <button onClick={() => setSidebarTab('packages')} title="Packages" style={{ background: 'none', border: 'none', color: sidebarTab === 'packages' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Palette size={24} /></button>
           <button onClick={() => setSidebarTab('git')} title="Source Control" style={{ background: 'none', border: 'none', color: sidebarTab === 'git' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Code2 size={24} /></button>
+          <button onClick={() => setSidebarTab('test')} title="Test Runner" style={{ background: 'none', border: 'none', color: sidebarTab === 'test' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Beaker size={24} /></button>
           <button onClick={() => setSidebarTab('env')} title="Environment Variables" style={{ background: 'none', border: 'none', color: sidebarTab === 'env' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Settings size={24} /></button>
           <button onClick={() => setSidebarTab('ports')} title="Ports" style={{ background: 'none', border: 'none', color: sidebarTab === 'ports' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Globe size={24} /></button>
           <div style={{ flex: 1 }} />
@@ -897,10 +913,26 @@ sys.stderr = io.StringIO()
         </div>
       )}
 
-      {/* LEFT SIDEBAR: DYNAMIC PANEL */}
-      {!isZenMode && (
+      {sidebarTab === 'search' && !isZenMode && (
         <div style={{ width: '250px', backgroundColor: '#252526', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-          {sidebarTab === 'explorer' && (
+          <GlobalSearch files={files} onSelectFile={setActiveFileId} />
+        </div>
+      )}
+
+      {sidebarTab === 'outline' && !isZenMode && (
+        <div style={{ width: '250px', backgroundColor: '#252526', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <OutlineView activeFile={activeFile} />
+        </div>
+      )}
+
+      {sidebarTab === 'test' && !isZenMode && (
+        <div style={{ width: '300px', backgroundColor: '#252526', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          <TestRunner files={files} />
+        </div>
+      )}
+
+      {sidebarTab === 'explorer' && !isZenMode && (
+        <div style={{ width: '250px', backgroundColor: '#252526', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <>
             <div style={{ padding: '12px 15px', color: '#888', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
               <span>Explorer</span>
@@ -984,17 +1016,34 @@ sys.stderr = io.StringIO()
               </button>
             </div>
           </>
-        )}
-        
-        {sidebarTab === 'search' && <GlobalSearch files={files} onSelectFile={setActiveFileId} />}
-        {sidebarTab === 'packages' && <PackageManager files={files} setFiles={setFiles} />}
-        {sidebarTab === 'git' && <GitPanel files={files} />}
-        {sidebarTab === 'env' && <EnvVariablesManager files={files} setFiles={setFiles} />}
-        {sidebarTab === 'ports' && <PortForwarding />}
-        {sidebarTab === 'settings' && <SettingsPanel settings={settings} setSettings={setSettings} />}
-      </div>
+        </div>
       )}
-
+        
+        {sidebarTab === 'packages' && !isZenMode && (
+          <div style={{ width: '250px', backgroundColor: '#252526', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+            <PackageManager files={files} setFiles={setFiles} />
+          </div>
+        )}
+        {sidebarTab === 'git' && !isZenMode && (
+          <div style={{ width: '300px', backgroundColor: '#252526', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+            <GitPanel files={files} />
+          </div>
+        )}
+        {sidebarTab === 'env' && !isZenMode && (
+          <div style={{ width: '300px', backgroundColor: '#252526', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+            <EnvVariablesManager files={files} setFiles={setFiles} />
+          </div>
+        )}
+        {sidebarTab === 'ports' && !isZenMode && (
+          <div style={{ width: '250px', backgroundColor: '#252526', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+            <PortForwarding />
+          </div>
+        )}
+        {sidebarTab === 'settings' && !isZenMode && (
+          <div style={{ width: '300px', backgroundColor: '#252526', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+            <SettingsPanel settings={settings} setSettings={setSettings} />
+          </div>
+        )}
       {/* MAIN EDITOR AREA */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         

@@ -10,6 +10,13 @@ import * as Y from 'yjs';
 import { WebrtcProvider } from 'y-webrtc';
 import { MonacoBinding } from 'y-monaco';
 import DocumentPreviewPane from './DocumentPreviewPane';
+import InlineAIPrompt from './InlineAIPrompt';
+import PackageManager from './PackageManager';
+import EnvVariablesManager from './EnvVariablesManager';
+import GitPanel from './GitPanel';
+import GlobalSearch from './GlobalSearch';
+import PortForwarding from './PortForwarding';
+import { formatCode } from './utils/formatter';
 
 const STORAGE_KEY = 'focusIDE_files';
 const ACTIVE_KEY = 'focusIDE_activeFile';
@@ -68,7 +75,16 @@ export default function CodeEditor() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const commandInputRef = useRef(null);
+
+  // Inline AI
+  const [inlineAIPosition, setInlineAIPosition] = useState(null);
+  const [inlineAISelection, setInlineAISelection] = useState('');
+  const [inlineAIRange, setInlineAIRange] = useState(null);
   
+  // Sidebar State
+  const [sidebarTab, setSidebarTab] = useState('explorer'); // 'explorer', 'packages', 'env', 'git'
+  const [isZenMode, setIsZenMode] = useState(false);
+
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
   const containerRef = useRef(null);
@@ -223,6 +239,49 @@ export default function CodeEditor() {
             const val = editorRef.current.getValue();
             const currentActiveId = activeFileIdRef.current;
             setFiles(prev => prev.map(f => f.id === currentActiveId ? { ...f, content: val } : f));
+          });
+
+          // Add Prettier Formatter Action
+          editorRef.current.addAction({
+            id: 'format-prettier',
+            label: 'Format with Prettier',
+            keybindings: [window.monaco.KeyMod.Shift | window.monaco.KeyMod.Alt | window.monaco.KeyCode.KeyF],
+            run: async (ed) => {
+              const val = ed.getValue();
+              const formatted = await formatCode(val, activeFile.language);
+              ed.setValue(formatted);
+            }
+          });
+
+          // Add Inline AI Action
+          editorRef.current.addAction({
+            id: 'inline-ai',
+            label: 'Generate with AI',
+            keybindings: [window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.KeyI],
+            run: (ed) => {
+              const selection = ed.getSelection();
+              const selectedText = ed.getModel().getValueInRange(selection);
+              const position = ed.getScrolledVisiblePosition(selection.getStartPosition());
+              const domNode = ed.getDomNode();
+              const rect = domNode.getBoundingClientRect();
+              
+              setInlineAISelection(selectedText);
+              setInlineAIRange(selection);
+              setInlineAIPosition({
+                top: rect.top + position.top + 25,
+                left: rect.left + position.left
+              });
+            }
+          });
+
+          // Add Zen Mode Action
+          editorRef.current.addAction({
+            id: 'toggle-zen-mode',
+            label: 'Toggle Zen Mode',
+            keybindings: [window.monaco.KeyCode.F11],
+            run: () => {
+              setIsZenMode(prev => !prev);
+            }
           });
 
           inlineCompletionsDisposable = window.monaco.languages.registerInlineCompletionsProvider('*', {
@@ -802,69 +861,109 @@ sys.stderr = io.StringIO()
       width: '100%', height: '100%', backgroundColor: '#1e1e1e',
       display: 'flex', position: 'relative'
     }}>
-      {/* LEFT SIDEBAR: FILE EXPLORER */}
-      <div style={{ width: '200px', backgroundColor: '#252526', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-        <div style={{ padding: '12px 15px', color: '#888', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
-          <span>Explorer</span>
-          <button onClick={addNewFile} title="New File" style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', padding: '2px' }}><Plus size={14} /></button>
+      {/* LEFT ACTIVITY BAR */}
+      {!isZenMode && (
+        <div style={{ width: '48px', backgroundColor: '#1e1e1e', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '10px', flexShrink: 0, gap: '15px' }}>
+          <button onClick={() => setSidebarTab('explorer')} title="Explorer" style={{ background: 'none', border: 'none', color: sidebarTab === 'explorer' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><FileCode size={24} /></button>
+          <button onClick={() => setSidebarTab('search')} title="Search" style={{ background: 'none', border: 'none', color: sidebarTab === 'search' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Search size={24} /></button>
+          <button onClick={() => setSidebarTab('packages')} title="Packages" style={{ background: 'none', border: 'none', color: sidebarTab === 'packages' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Palette size={24} /></button>
+          <button onClick={() => setSidebarTab('git')} title="Source Control" style={{ background: 'none', border: 'none', color: sidebarTab === 'git' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Code2 size={24} /></button>
+          <button onClick={() => setSidebarTab('env')} title="Environment Variables" style={{ background: 'none', border: 'none', color: sidebarTab === 'env' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Settings size={24} /></button>
+          <button onClick={() => setSidebarTab('ports')} title="Ports" style={{ background: 'none', border: 'none', color: sidebarTab === 'ports' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Globe size={24} /></button>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          {files.map(f => (
-            <div 
-              key={f.id} 
-              onClick={() => setActiveFileId(f.id)}
-              style={{
-                padding: '6px 15px', display: 'flex', alignItems: 'center', gap: '8px',
-                backgroundColor: f.id === activeFileId ? '#37373d' : 'transparent',
-                color: f.id === activeFileId ? '#fff' : '#aaa',
-                cursor: 'pointer', borderLeft: f.id === activeFileId ? '2px solid var(--accent-cyan)' : '2px solid transparent',
-                fontSize: '0.85rem',
-                transition: 'background 0.15s ease',
-                userSelect: 'none'
-              }}
-            >
-              <FileCode size={13} style={{ flexShrink: 0 }} /> 
-              {renamingFileId === f.id ? (
-                <input 
-                  autoFocus
-                  type="text" 
-                  value={f.name}
-                  onChange={(e) => setFiles(prev => prev.map(file => file.id === f.id ? { ...file, name: e.target.value } : file))}
-                  onBlur={finishRename}
-                  onKeyDown={(e) => handleRenameInput(e, f.id)}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ background: '#252526', border: '1px solid var(--accent-cyan)', color: 'inherit', outline: 'none', width: '100%', fontSize: '0.82rem', fontFamily: 'inherit', padding: '2px 4px' }}
-                />
-              ) : (
-                <span 
-                  onDoubleClick={(e) => startRename(e, f.id)}
-                  title="Double-click to rename"
-                  style={{ width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                >
-                  {f.name}
-                </span>
-              )}
+      )}
+
+      {/* LEFT SIDEBAR: DYNAMIC PANEL */}
+      {!isZenMode && (
+        <div style={{ width: '250px', backgroundColor: '#252526', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+          {sidebarTab === 'explorer' && (
+          <>
+            <div style={{ padding: '12px 15px', color: '#888', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              <span>Explorer</span>
+              <button onClick={addNewFile} title="New File" style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', padding: '2px' }}><Plus size={14} /></button>
             </div>
-          ))}
-        </div>
-        <div style={{ padding: '10px', borderTop: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <button 
-            onClick={saveToCloud}
-            disabled={isSaving}
-            style={{ width: '100%', padding: '8px', background: 'var(--accent-purple)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.8rem', transition: 'opacity 0.2s' }}
-          >
-            {isSaving ? <Loader size={13} className="spin" /> : <Cloud size={13} />} 
-            {db ? 'Save to Cloud' : 'Download Backup'}
-          </button>
-          {saveStatus === 'saved' && <div style={{ color: 'var(--accent-cyan)', fontSize: '0.7rem', textAlign: 'center' }}>✓ Saved successfully</div>}
-          {saveStatus === 'error' && <div style={{ color: 'var(--danger)', fontSize: '0.7rem', textAlign: 'center' }}>✕ Save failed</div>}
-          <div style={{ fontSize: '0.65rem', color: '#555', textAlign: 'center' }}>Auto-saved locally</div>
-        </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {files.map(f => (
+                <div 
+                  key={f.id} 
+                  onClick={() => setActiveFileId(f.id)}
+                  style={{
+                    padding: '6px 15px', display: 'flex', alignItems: 'center', gap: '8px',
+                    backgroundColor: f.id === activeFileId ? '#37373d' : 'transparent',
+                    color: f.id === activeFileId ? '#fff' : '#aaa',
+                    cursor: 'pointer', borderLeft: f.id === activeFileId ? '2px solid var(--accent-cyan)' : '2px solid transparent',
+                    fontSize: '0.85rem',
+                    transition: 'background 0.15s ease',
+                    userSelect: 'none'
+                  }}
+                >
+                  <FileCode size={13} style={{ flexShrink: 0 }} /> 
+                  {renamingFileId === f.id ? (
+                    <input 
+                      autoFocus
+                      type="text" 
+                      value={f.name}
+                      onChange={(e) => setFiles(prev => prev.map(file => file.id === f.id ? { ...file, name: e.target.value } : file))}
+                      onBlur={finishRename}
+                      onKeyDown={(e) => handleRenameInput(e, f.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ background: '#252526', border: '1px solid var(--accent-cyan)', color: 'inherit', outline: 'none', width: '100%', fontSize: '0.82rem', fontFamily: 'inherit', padding: '2px 4px' }}
+                    />
+                  ) : (
+                    <span 
+                      onDoubleClick={(e) => startRename(e, f.id)}
+                      title="Double-click to rename"
+                      style={{ width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >
+                      {f.name}
+                    </span>
+                  )}
+                  {f.id !== activeFileId && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); deleteFile(f.id); }}
+                      style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', padding: '2px', opacity: 0.6 }}
+                      title="Delete File"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: '10px', borderTop: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <button 
+                onClick={saveToCloud}
+                disabled={isSaving}
+                style={{ width: '100%', padding: '8px', background: 'var(--accent-purple)', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.8rem', transition: 'opacity 0.2s' }}
+              >
+                {isSaving ? <Loader size={13} className="spin" /> : <Cloud size={13} />} 
+                {db ? 'Save to Cloud' : 'Download Backup'}
+              </button>
+              {saveStatus === 'saved' && <div style={{ color: 'var(--accent-cyan)', fontSize: '0.7rem', textAlign: 'center' }}>✓ Saved successfully</div>}
+              {saveStatus === 'error' && <div style={{ color: 'var(--danger)', fontSize: '0.7rem', textAlign: 'center' }}>✕ Save failed</div>}
+              <div style={{ fontSize: '0.65rem', color: '#555', textAlign: 'center' }}>Auto-saved locally</div>
+            </div>
+          </>
+        )}
+        
+        {sidebarTab === 'search' && <GlobalSearch files={files} onSelectFile={setActiveFileId} />}
+        {sidebarTab === 'packages' && <PackageManager files={files} setFiles={setFiles} />}
+        {sidebarTab === 'git' && <GitPanel files={files} />}
+        {sidebarTab === 'env' && <EnvVariablesManager files={files} setFiles={setFiles} />}
+        {sidebarTab === 'ports' && <PortForwarding />}
       </div>
+      )}
 
       {/* MAIN EDITOR AREA */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         
+        {/* ═══ Breadcrumbs ═══ */}
+        <div style={{ padding: '4px 15px', fontSize: '0.75rem', color: '#888', borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <span>Focus OS</span> <span style={{ opacity: 0.5 }}>/</span> 
+          <span>src</span> <span style={{ opacity: 0.5 }}>/</span> 
+          <span style={{ color: 'var(--accent-cyan)' }}>{activeFile ? activeFile.name : 'Unknown'}</span>
+        </div>
+
         {/* ═══ VS-Code Style Tab Bar ═══ */}
         <div style={{ 
           display: 'flex', alignItems: 'stretch', backgroundColor: '#252526', 
@@ -1145,6 +1244,23 @@ sys.stderr = io.StringIO()
           </div>
         </div>
       )}
+
+      {/* ═══ Inline AI Prompt Overlay ═══ */}
+      <InlineAIPrompt 
+        position={inlineAIPosition}
+        selectionText={inlineAISelection}
+        fileLanguage={activeFile.language}
+        onClose={() => setInlineAIPosition(null)}
+        onApply={(code) => {
+          if (editorRef.current && inlineAIRange) {
+            editorRef.current.executeEdits('inline-ai', [{
+              range: inlineAIRange,
+              text: code,
+              forceMoveMarkers: true
+            }]);
+          }
+        }}
+      />
 
     </div>
   );

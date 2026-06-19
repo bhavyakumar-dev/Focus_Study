@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Terminal, Play, Bot, X, Loader, FileCode, Plus, Save, Cloud, Trash2, Users, Globe, Settings, Palette, Code2 } from 'lucide-react';
+import { Terminal, Play, Bot, X, Loader, FileCode, Plus, Save, Cloud, Trash2, Users, Globe, Settings, Palette, Code2, Image as ImageIcon, FileJson, FileText, Search } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { db, doc, setDoc, getDoc } from './firebase';
 import { getWebContainer, syncFilesToWebContainer, onServerReady } from './WebContainerManager';
@@ -16,7 +16,10 @@ import EnvVariablesManager from './EnvVariablesManager';
 import GitPanel from './GitPanel';
 import GlobalSearch from './GlobalSearch';
 import PortForwarding from './PortForwarding';
+import SettingsPanel from './SettingsPanel';
 import { formatCode } from './utils/formatter';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
 const STORAGE_KEY = 'focusIDE_files';
 const ACTIVE_KEY = 'focusIDE_activeFile';
@@ -82,8 +85,13 @@ export default function CodeEditor() {
   const [inlineAIRange, setInlineAIRange] = useState(null);
   
   // Sidebar State
-  const [sidebarTab, setSidebarTab] = useState('explorer'); // 'explorer', 'packages', 'env', 'git'
+  const [sidebarTab, setSidebarTab] = useState('explorer'); // 'explorer', 'packages', 'env', 'git', 'settings'
   const [isZenMode, setIsZenMode] = useState(false);
+  const [settings, setSettings] = useState(() => {
+    const saved = localStorage.getItem('focusIDE_settings');
+    if (saved) return JSON.parse(saved);
+    return { theme: 'vs-dark', fontSize: 14, wordWrap: 'off', minimap: true };
+  });
 
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
@@ -137,7 +145,19 @@ export default function CodeEditor() {
     try {
       localStorage.setItem(ACTIVE_KEY, String(activeFileId));
     } catch { /* ignore */ }
-  }, [activeFileId]);
+  }, [activeFileId, activeFile]);
+
+  // Update Monaco when settings change
+  useEffect(() => {
+    if (editorRef.current) {
+      window.monaco.editor.setTheme(settings.theme);
+      editorRef.current.updateOptions({
+        fontSize: settings.fontSize,
+        wordWrap: settings.wordWrap,
+        minimap: { enabled: settings.minimap }
+      });
+    }
+  }, [settings]);
 
   // ─── Auto-scroll terminal to bottom ───
   useEffect(() => {
@@ -211,33 +231,35 @@ export default function CodeEditor() {
     script.onload = () => {
       window.require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.38.0/min/vs' }});
       window.require(['vs/editor/editor.main'], function() {
-        if (containerRef.current) {
-          editorRef.current = window.monaco.editor.create(containerRef.current, {
-            value: activeFile.content,
-            language: activeFile.language,
-            theme: 'vs-dark',
+        // Initialize Monaco
+        if (window.monaco && !editorRef.current) {
+          editorRef.current = window.monaco.editor.create(document.getElementById('monaco-container'), {
+            value: activeFile ? activeFile.content : '',
+            language: activeFile ? activeFile.language : 'javascript',
+            theme: settings.theme,
             automaticLayout: true,
-            minimap: { enabled: true },
-            bracketPairColorization: { enabled: true },
-            suggestOnTriggerCharacters: true,
-            wordBasedSuggestions: 'currentDocument',
-            quickSuggestions: { other: true, comments: false, strings: false },
-            fontSize: 14,
-            fontFamily: '"Fira Code", "Cascadia Code", monospace',
-            fontLigatures: true,
-            padding: { top: 15 },
+            fontSize: settings.fontSize,
+            wordWrap: settings.wordWrap,
+            minimap: { enabled: settings.minimap },
+            padding: { top: 10 },
+            roundedSelection: false,
+            scrollBeyondLastLine: false,
             smoothScrolling: true,
             cursorBlinking: 'smooth',
-            cursorSmoothCaretAnimation: 'on',
-            renderLineHighlight: 'all',
-            scrollBeyondLastLine: false,
+            cursorSmoothCaretAnimation: true
           });
+          
           monacoRef.current = window.monaco;
 
           // Use ref to avoid stale closure on activeFileId
           editorRef.current.onDidChangeModelContent(() => {
             const val = editorRef.current.getValue();
             const currentActiveId = activeFileIdRef.current;
+            // Check if it's an image
+            if (activeFile?.name.match(/\.(png|jpe?g|gif|svg)$/i)) {
+               return; // Binary files not supported in text editor yet
+            }
+
             setFiles(prev => prev.map(f => f.id === currentActiveId ? { ...f, content: val } : f));
           });
 
@@ -870,6 +892,8 @@ sys.stderr = io.StringIO()
           <button onClick={() => setSidebarTab('git')} title="Source Control" style={{ background: 'none', border: 'none', color: sidebarTab === 'git' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Code2 size={24} /></button>
           <button onClick={() => setSidebarTab('env')} title="Environment Variables" style={{ background: 'none', border: 'none', color: sidebarTab === 'env' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Settings size={24} /></button>
           <button onClick={() => setSidebarTab('ports')} title="Ports" style={{ background: 'none', border: 'none', color: sidebarTab === 'ports' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer' }}><Globe size={24} /></button>
+          <div style={{ flex: 1 }} />
+          <button onClick={() => setSidebarTab('settings')} title="Settings" style={{ background: 'none', border: 'none', color: sidebarTab === 'settings' ? 'var(--accent-cyan)' : '#888', cursor: 'pointer', paddingBottom: '20px' }}><Settings size={24} /></button>
         </div>
       )}
 
@@ -882,8 +906,16 @@ sys.stderr = io.StringIO()
               <span>Explorer</span>
               <button onClick={addNewFile} title="New File" style={{ background: 'none', border: 'none', color: '#ccc', cursor: 'pointer', padding: '2px' }}><Plus size={14} /></button>
             </div>
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {files.map(f => (
+            <div style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#888', marginBottom: '8px', paddingLeft: '4px', textTransform: 'uppercase', letterSpacing: '1px' }}>Explorer</div>
+              {files.map(f => {
+                const ext = f.name.split('.').pop()?.toLowerCase();
+                let Icon = FileCode;
+                if (['png', 'jpg', 'jpeg', 'gif', 'svg'].includes(ext)) Icon = ImageIcon;
+                else if (['json', 'package'].includes(ext)) Icon = FileJson;
+                else if (['md', 'txt'].includes(ext)) Icon = FileText;
+
+                return (
                 <div 
                   key={f.id} 
                   onClick={() => setActiveFileId(f.id)}
@@ -897,7 +929,7 @@ sys.stderr = io.StringIO()
                     userSelect: 'none'
                   }}
                 >
-                  <FileCode size={13} style={{ flexShrink: 0 }} /> 
+                  <Icon size={14} style={{ flexShrink: 0 }} /> 
                   {renamingFileId === f.id ? (
                     <input 
                       autoFocus
@@ -928,7 +960,8 @@ sys.stderr = io.StringIO()
                     </button>
                   )}
                 </div>
-              ))}
+              );
+            })}
             </div>
             <div style={{ padding: '10px', borderTop: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <button 
@@ -942,6 +975,13 @@ sys.stderr = io.StringIO()
               {saveStatus === 'saved' && <div style={{ color: 'var(--accent-cyan)', fontSize: '0.7rem', textAlign: 'center' }}>✓ Saved successfully</div>}
               {saveStatus === 'error' && <div style={{ color: 'var(--danger)', fontSize: '0.7rem', textAlign: 'center' }}>✕ Save failed</div>}
               <div style={{ fontSize: '0.65rem', color: '#555', textAlign: 'center' }}>Auto-saved locally</div>
+              
+              <button 
+                onClick={downloadZip}
+                style={{ width: '100%', padding: '6px', background: 'transparent', color: '#888', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.75rem', marginTop: '5px' }}
+              >
+                Download ZIP
+              </button>
             </div>
           </>
         )}
@@ -951,6 +991,7 @@ sys.stderr = io.StringIO()
         {sidebarTab === 'git' && <GitPanel files={files} />}
         {sidebarTab === 'env' && <EnvVariablesManager files={files} setFiles={setFiles} />}
         {sidebarTab === 'ports' && <PortForwarding />}
+        {sidebarTab === 'settings' && <SettingsPanel settings={settings} setSettings={setSettings} />}
       </div>
       )}
 
@@ -1094,9 +1135,19 @@ sys.stderr = io.StringIO()
         </div>
 
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-          {/* Monaco Editor */}
+          {/* Editor / Image Viewer */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div ref={containerRef} style={{ flex: 1, height: '100%' }} />
+            {activeFile?.name.match(/\.(png|jpe?g|gif|svg)$/i) ? (
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#1e1e1e', overflow: 'hidden', padding: '20px' }}>
+                <img 
+                  src={activeFile.content} 
+                  alt={activeFile.name} 
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', backgroundColor: activeFile.name.endsWith('.svg') ? 'white' : 'transparent', borderRadius: '4px' }} 
+                />
+              </div>
+            ) : (
+              <div id="monaco-container" ref={containerRef} style={{ flex: 1, height: '100%' }} />
+            )}
             {vimModeEnabled && <div ref={vimStatusBarRef} style={{ padding: '2px 10px', fontSize: '0.75rem', backgroundColor: '#333', color: '#ccc', fontFamily: '"Cascadia Code", monospace', flexShrink: 0 }} />}
           </div>
 

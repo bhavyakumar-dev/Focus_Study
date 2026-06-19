@@ -56,7 +56,6 @@ We built this using React, Vite, and Electron, with Firebase handling the backen
 1. Run `npm install` to grab the dependencies.
 2. Want the web version? Run `npm run dev`.
 3. Prefer the native Desktop app? Run `npm run electron:dev`.
-4. (Optional) Pop your Gemini API Key into the Setup screen, and add your Firebase config to `firebase.js` if you want cloud sync.
 
 ### Deploying
 - **Web:** Just push to Netlify! We have a `netlify.toml` ready to go. Our build pipeline (`npm run build`) works flawlessly.
